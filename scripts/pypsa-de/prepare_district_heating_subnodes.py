@@ -21,7 +21,7 @@ import zipfile
 import dask
 from dask.diagnostics import ProgressBar
 
-
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from scripts._helpers import (
     configure_logging,
     set_scenario_config,
@@ -298,6 +298,9 @@ def prepare_subnodes(
     subnodes = subnodes.set_geometry("lau_shape")
     subnodes.crs = "EPSG:4326"
     subnodes = subnodes.to_crs(3035)
+    # Rename lau_shape to geometry
+    subnodes = subnodes.rename(columns={"lau_shape": "geometry"})
+    subnodes = subnodes.set_geometry("geometry")
 
     # Make point_coords wkt
     subnodes["point_coords"] = subnodes["point_coords"].apply(lambda x: x.wkt)
@@ -549,13 +552,10 @@ def extend_regions_onshore(
         head = 40
 
     # Extend regions_onshore to include the cities' lau regions
-    subnodes = (
-        subnodes_all.sort_values(by="Wärmeeinspeisung in GWh/a", ascending=False)
-        .head(head)[["name", "cluster", "lau_shape"]]
-        .rename(columns={"lau_shape": "geometry"})
-    )
-    # Create GeoDataFrame with lau_shape as geometry and EPSG:4326 CRS
-    subnodes = gpd.GeoDataFrame(subnodes, geometry="geometry", crs="EPSG:3035")
+    subnodes = subnodes_all.sort_values(
+        by="Wärmeeinspeisung in GWh/a", ascending=False
+    ).head(head)[["name", "cluster", "geometry"]]
+
     subnodes = subnodes.to_crs("EPSG:4326")
 
     # Crop city regions from onshore regions
@@ -621,6 +621,7 @@ if __name__ == "__main__":
     )
     lau = gpd.read_file(
         f"{snakemake.input.lau_regions}!LAU_RG_01M_2019_3035.geojson",
+        # "/home/cpschau/Downloads/ref-lau-2019-01m.geojson/LAU_RG_01M_2019_3035.geojson",
         crs="EPSG:3035",
     ).to_crs("EPSG:4326")
 
@@ -646,7 +647,7 @@ if __name__ == "__main__":
         heat_techs,
     )
 
-    subnodes = refine_dh_areas_from_census_data(subnodes, census)
+    # subnodes = refine_dh_areas_from_census_data(subnodes, census)
 
     bounds = subnodes.to_crs("EPSG:4326").total_bounds  # (minx, miny, maxx, maxy)
     groundwater = xr.open_dataset(snakemake.input.groundwater_depth).sel(

@@ -3,18 +3,18 @@
 # SPDX-License-Identifier: CC0-1.0
 
 run:
-  prefix: 20250320_dhsubnodes
+  prefix: 20250401_dhsubnodes_eem
   name:
   - Baseline
-  # - No_PTES
-  # - LowPTESCAPEX
-  # - HighPTESCAPEX
-  # - LowStandingLosses
-  # - HighStandingLosses
-  # - LowGroundWaterDepth
-  # - HighGroundWaterDepth
-  # - LowEtPRatio
-  # - HighEtPRatio
+  - No_PTES
+  - LowPTESCAPEX
+  - HighPTESCAPEX
+  - LowStandingLosses
+  - HighStandingLosses
+  - LowGroundWaterDepth
+  - HighGroundWaterDepth
+  - LowEtPRatio
+  - HighEtPRatio
   scenarios:
     enable: true
     manual_file: config/scenarios.sysgf.yaml
@@ -57,21 +57,21 @@ scenario:
   - none
   planning_horizons:
   # - 2020
-  # - 2025
+  # # - 2025
   # - 2030
-  # - 2035
+  # # - 2035
   # - 2040
   - 2045
   
 clustering:
   temporal:
-    resolution_sector: 365H
+    resolution_sector: 3H
 
 adjustments:
     electricity: false
     sector:
       absolute:
-        StorageUnit:
+        stores:
           urban central water pits:
             standing_loss: 0.00012121
           urban central water tanks:
@@ -81,6 +81,8 @@ wasserstoff_kernnetz:
   enable: false
 
 sector:
+  chp:
+    enable: true
   district_heating:
     potential: 0.5
     add_subnodes: true

@@ -9,11 +9,10 @@ import pandas as pd
 import pypsa
 from shapely.geometry import Point
 
-from scripts._helpers import (
-    configure_logging, 
-    mock_snakemake,
-    sanitize_custom_columns
-)
+# Append parent directory to path
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+from scripts._helpers import configure_logging, mock_snakemake, sanitize_custom_columns
 from scripts.add_electricity import load_costs
 from scripts.prepare_sector_network import lossy_bidirectional_links, prepare_costs
 
@@ -1293,8 +1292,8 @@ if __name__ == "__main__":
             opts="",
             ll="vopt",
             sector_opts="none",
-            planning_horizons="2025",
-            run="KN2045_Bal_v4",
+            planning_horizons="2045",
+            run="Baseline",
         )
 
     configure_logging(snakemake)

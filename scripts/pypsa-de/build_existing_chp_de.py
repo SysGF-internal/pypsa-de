@@ -237,8 +237,8 @@ def assign_subnode(
         CHP_de, geometry=gpd.points_from_xy(CHP_de.lon, CHP_de.lat)
     )
     # Set LAU shape column as geometry
-    subnodes["geometry"] = gpd.GeoSeries.from_wkt(subnodes["lau_shape"])
-    subnodes.drop("lau_shape", axis=1, inplace=True)
+    # subnodes["geometry"] = gpd.GeoSeries.from_wkt(subnodes["lau_shape"])
+    # subnodes.drop("lau_shape", axis=1, inplace=True)
 
     # Set CRS to WGS84
     CHP_de.crs = 4326

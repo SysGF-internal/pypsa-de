@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: 20250320_dhsubnodes
+  prefix: 20250331_dhsubnodes
   name:
   # - CurrentPolicies
   - KN2045_Bal_v4
@@ -30,6 +30,16 @@ run:
     - build_industry_sector_ratios   # This is necessary to save build_industry_sector_ratios_data.log in the correct folder
     - modify_existing_heating
   disable_progressbar: true
+
+adjustments:
+    electricity: false
+    sector:
+      absolute:
+        stores:
+          urban central water pits:
+            standing_loss: 0.00012121
+          urban central water tanks:
+            standing_loss: 0.00015476
 
 iiasa_database:
   db_name: ariadne2_intern
@@ -245,7 +255,7 @@ co2_budget:
   2050: 0.000 # climate-neutral by 2050
 
 wasserstoff_kernnetz:
-  enable: true
+  enable: false
   reload_locations: false
   divide_pipes: true
   pipes_segment_length: 50
@@ -278,7 +288,7 @@ costs:
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#sector
 sector:
   chp:
-    enable: false # This should only deactivate the CHPs from prepare_sector_network, not those from add_existing_baseyear
+    enable: trues # This should only deactivate the CHPs from prepare_sector_network, not those from add_existing_baseyear
   v2g: false
   solar_thermal: false
   district_heating:
@@ -291,7 +301,7 @@ sector:
       2040: 0.6
       2045: 0.8
       2050: 1.0
-    add_subnodes: false
+    add_subnodes: true
     excluder_resolution: 10
     osm_landcover_codes: [21, 23, 32, 33]
     max_groundwater_depth: -10

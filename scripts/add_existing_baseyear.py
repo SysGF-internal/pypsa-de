@@ -18,6 +18,7 @@ import powerplantmatching as pm
 import pypsa
 import xarray as xr
 
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from scripts._helpers import (
     configure_logging,
     sanitize_custom_columns,
@@ -1077,13 +1078,13 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "add_existing_baseyear",
-            configfiles="config/config.yaml",
+            # configfiles="config/config.yaml",
             clusters="27",
             ll="vopt",
             opts="",
             sector_opts="none",
-            planning_horizons="2020",
-            run="KN2045_Bal_v4",
+            planning_horizons="2045",
+            run="Baseline",
         )
 
     configure_logging(snakemake)
