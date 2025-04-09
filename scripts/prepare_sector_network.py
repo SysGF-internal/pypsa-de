@@ -2720,7 +2720,10 @@ def add_heat(
 
         ## Add heat pumps
         for heat_source in params.heat_pump_sources[heat_system.system_type.value]:
-            costs_name_heat_pump = heat_system.heat_pump_costs_name(heat_source)
+            if heat_source == "geothermal":
+                costs_name_heat_pump = heat_system.heat_pump_costs_name("excess-heat")
+            else:
+                costs_name_heat_pump = heat_system.heat_pump_costs_name(heat_source)
             cop_heat_pump = (
                 cop.sel(
                     heat_system=heat_system.system_type.value,

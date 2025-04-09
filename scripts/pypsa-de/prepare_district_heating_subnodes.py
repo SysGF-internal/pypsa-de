@@ -650,7 +650,9 @@ if __name__ == "__main__":
     # subnodes = refine_dh_areas_from_census_data(subnodes, census)
 
     bounds = subnodes.to_crs("EPSG:4326").total_bounds  # (minx, miny, maxx, maxy)
-    groundwater = xr.open_dataset(snakemake.input.groundwater_depth).sel(
+    groundwater = xr.open_dataset(
+        snakemake.input.groundwater_depth, engine="netcdf4"
+    ).sel(
         lon=slice(bounds[0], bounds[2]),  # minx to maxx
         lat=slice(bounds[1], bounds[3]),  # miny to maxy
     )
