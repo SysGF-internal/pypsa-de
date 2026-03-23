@@ -213,6 +213,12 @@ class HeatSource(Enum):
             HeatSource.METHANOLISATION_WASTE: "methanolisation",
             HeatSource.ELECTROLYSIS_WASTE: "H2 Electrolysis",
             HeatSource.FUEL_CELL_WASTE: "H2 Fuel Cell",
+            HeatSource.FISCHER_TROPSCH_WASTE: "Fischer-Tropsch",
+            HeatSource.SABATIER_WASTE: "Sabatier",
+            HeatSource.HABER_BOSCH_WASTE: "Haber-Bosch",
+            HeatSource.METHANOLISATION_WASTE: "methanolisation",
+            HeatSource.ELECTROLYSIS_WASTE: "H2 Electrolysis",
+            HeatSource.FUEL_CELL_WASTE: "H2 Fuel Cell",
         }
         return mapping.get(self)
 
@@ -253,6 +259,12 @@ class HeatSource(Enum):
             HeatSource.METHANOLISATION_WASTE: "use_methanolisation_waste_heat",
             HeatSource.ELECTROLYSIS_WASTE: "use_electrolysis_waste_heat",
             HeatSource.FUEL_CELL_WASTE: "use_fuel_cell_waste_heat",
+            HeatSource.FISCHER_TROPSCH_WASTE: "use_fischer_tropsch_waste_heat",
+            HeatSource.SABATIER_WASTE: "use_methanation_waste_heat",
+            HeatSource.HABER_BOSCH_WASTE: "use_haber_bosch_waste_heat",
+            HeatSource.METHANOLISATION_WASTE: "use_methanolisation_waste_heat",
+            HeatSource.ELECTROLYSIS_WASTE: "use_electrolysis_waste_heat",
+            HeatSource.FUEL_CELL_WASTE: "use_fuel_cell_waste_heat",
         }
         return mapping.get(self)
 
@@ -270,6 +282,11 @@ class HeatSource(Enum):
             The technology name for costs lookup, or None if efficiency is calculated.
         """
         mapping = {
+            HeatSource.FISCHER_TROPSCH_WASTE: "Fischer-Tropsch",
+            HeatSource.HABER_BOSCH_WASTE: "Haber-Bosch",
+            HeatSource.ELECTROLYSIS_WASTE: "electrolysis",
+            HeatSource.HABER_BOSCH_WASTE: "Haber-Bosch",
+            HeatSource.METHANOLISATION_WASTE: "methanolisation",
             HeatSource.FISCHER_TROPSCH_WASTE: "Fischer-Tropsch",
             HeatSource.HABER_BOSCH_WASTE: "Haber-Bosch",
             HeatSource.ELECTROLYSIS_WASTE: "electrolysis",
@@ -411,25 +428,31 @@ class HeatSource(Enum):
             )
 
         if self == HeatSource.FISCHER_TROPSCH_WASTE:
+        if self == HeatSource.FISCHER_TROPSCH_WASTE:
             return costs.at[self.technology_data_name, "efficiency-heat"]
         elif self == HeatSource.ELECTROLYSIS_WASTE:
+        elif self == HeatSource.ELECTROLYSIS_WASTE:
             return costs.at[self.technology_data_name, "efficiency-heat"]
+        elif self == HeatSource.HABER_BOSCH_WASTE:
         elif self == HeatSource.HABER_BOSCH_WASTE:
             return (
                 costs.at[self.technology_data_name, "efficiency-heat"]
                 / costs.at[self.technology_data_name, "electricity-input"]
             )
         elif self == HeatSource.METHANOLISATION_WASTE:
+        elif self == HeatSource.METHANOLISATION_WASTE:
             return (
                 costs.at[self.technology_data_name, "heat-output"]
                 / costs.at[self.technology_data_name, "hydrogen-input"]
             )
+        elif self == HeatSource.SABATIER_WASTE:
         elif self == HeatSource.SABATIER_WASTE:
             return (
                 1
                 - fallback_ptx_heat_losses
                 - n.links.loc[nodes + " Sabatier", "efficiency"]
             )
+        elif self == HeatSource.FUEL_CELL_WASTE:
         elif self == HeatSource.FUEL_CELL_WASTE:
             return (
                 1
