@@ -8,6 +8,11 @@ Release Notes
 
 Upcoming Release
 ================
+
+* Feat: added support for lake-water sourced heat pumps in district heating, based on data from HydroLakes and a methods from Triebs (https://github.com/PyPSA/pypsa-eur/pull/1951)
+
+* Refactor: Integrated excess heat from Power-to-X processes into the new heat-source structure and moved some code from `scripts/prepare_sector_network.py` to `scripts/def/heat_source.py`. Also updated PtX excess heat efficiencies (https://github.com/PyPSA/pypsa-eur/pull/1944).
+
 * Update heat source handling in `prepare_sector_network` and introduce preheating of heat sources for more realistic system integrations (https://github.com/PyPSA/pypsa-eur/pull/1893).
 
 * Add script path getter helper method to allow for rule inheritance in nested snakefiles.
@@ -77,8 +82,11 @@ Upcoming Release
 * Xpress solver configuration options (``xpress-default`` and ``xpress-gpu``) with barrier method settings for
   large-scale problems (https://github.com/PyPSA/pypsa-eur/pull/2006).
 
-* ``clustering: consider_efficiency_classes`` now accepts list of quantile boundaries (e.g. ``[0.1, 0.5, 0.9]``)
-  in addition to boolean; default unchanged (https://github.com/PyPSA/pypsa-eur/pull/2075).
+* Added example configurations for rolling horizon and iterative optimization modes in `config/examples/`.
+
+* Refactor: Integrated excess heat from Power-to-X processes into the new heat-source structure and moved some code from `scripts/prepare_sector_network.py` to `scripts/def/heat_source.py`. Also updated PtX excess heat efficiencies (https://github.com/PyPSA/pypsa-eur/pull/1944).
+
+* Update heat source handling in `prepare_sector_network` and introduce preheating of heat sources for more realistic system integrations (https://github.com/PyPSA/pypsa-eur/pull/1893).
 
 * Added existing biomass decentral/rural residential and services heating capacity
   (https://github.com/PyPSA/pypsa-eur/pull/1872).
