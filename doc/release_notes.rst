@@ -6,75 +6,49 @@
 Release Notes
 ##########################################
 
-.. Upcoming Release
-.. =================
+Upcoming Release
+================
+* Update heat source handling in `prepare_sector_network` and introduce preheating of heat sources for more realistic system integrations (https://github.com/PyPSA/pypsa-eur/pull/1893).
 
-PyPSA-Eur v2026.02.0 (18th February 2026)
-=========================================
+* Add script path getter helper method to allow for rule inheritance in nested snakefiles.
 
-**Features**
+* Include new storage technologies such as li-ion, vanadium, lfp, lair, pair and iron-air. These technologies can now be configured as either store-link combinations or standalone storage units.
+  Implemented in both `add_electricity.py` and `prepare_sector_network.py` (https://github.com/PyPSA/pypsa-eur/pull/1961).
+  
+* Updated data sources for country-level electricity demand time series. In addition to the OPSD data (``retrieve_electricity_demand_opsd``, demand time series
+  are now downloaded via the ENTSO-E Transparency Platform API (``retrieve_electricity_demand_entsoe`` environment variable ``ENTSOE_API_KEY`` required)
+  and from the NESO data portal for Great Britain and Northern Ireland (``retrieve_electricity_demand_neso``).
+  Manual corrections and gap filling methods have been applied and checked for data until the end of 2025.
+  (https://github.com/PyPSA/pypsa-eur/pull/1828).
 
-* **Updated energy balances:**
+* Applied scaling of kW and GW to MW for custom_costs as well (https://github.com/PyPSA/pypsa-eur/pull/2023).
 
-  - Update energy balances from JRC-IDEES-2021 to JRC-IDEES-2023; default reference year changed from 2019 to 2023
-    (https://github.com/PyPSA/pypsa-eur/pull/1976).
+* Fix wildcards error in `clean_osm_data` rule message introduced in github.com/PyPSA/pypsa-eur/pull/1846 by replacing `wildcards.country` with expanded `config["countries"]` list (https://github.com/PyPSA/pypsa-eur/pull/2022).
 
-  - Build energy balances from Eurostat API data with new rule :mod:`build_eurostat_balances`
-    (https://github.com/PyPSA/pypsa-eur/pull/1987).
+* Fix `None` default config parameter from creating zero availability for offshore wind (#2019).
 
-  - Updated Swiss energy balances from Swiss Federal Office of Energy (SFOE, October 2025), retrieved directly
-    from SFOE website in :mod:`build_swiss_energy_balances` (https://github.com/PyPSA/pypsa-eur/pull/2057).
+* Remove snakemake's slurm plugin from windows installations (https://github.com/PyPSA/pypsa-eur/pull/2009).
 
-* **Better electricity demand data:**
+* Added Xpress solver configuration options (``xpress-default`` and ``xpress-gpu``) with barrier method settings optimized for large-scale linear programming problems.
 
-  - Updated electricity demand data sources with ENTSO-E Transparency Platform API (requires ``ENTSOE_API_KEY``)
-    and NESO data portal for Great Britain and Northern Ireland (https://github.com/PyPSA/pypsa-eur/pull/1828).
+* Added missing bidding zone data sources to data layer (https://github.com/PyPSA/pypsa-eur/pull/1991).
 
-  - Electricity demand distribution to subnational model regions now uses JRC Energy Atlas data for EU countries
-    (1km x 1km raster) with fallbacks to NESO and NUTS3-based distribution
-    (https://github.com/PyPSA/pypsa-eur/pull/1829).
+* Fix virtual bus naming when building the transmission network from raw OSM data to use persistent names (https://github.com/PyPSA/pypsa-eur/pull/1956).
 
-* **Updated electricity network data:**
+* Fix column selection when preparing OSM pre-built releases (https://github.com/PyPSA/pypsa-eur/pull/1956).
 
-  - Improved OSM network building: Support for voltage levels from 63 kV to 750 kV, temporal attributes
-    (start_date, construction tags), and pure DC buses (switching stations).
-    Rebuilt interactive network map using PyDeck/deck.gl (https://github.com/PyPSA/pypsa-eur/pull/2052, https://github.com/PyPSA/pypsa-eur/pull/2030).
+* Fix: capital-cost of solar-hsat did not get adjusted to current planning_horizon in myopic optimization
 
-  - Added prebuilt OSM network v0.7 (https://zenodo.org/records/18619025)
-    (https://github.com/PyPSA/pypsa-eur/pull/2064, https://github.com/PyPSA/pypsa-eur/pull/2054).
+* Removed the ``secrets`` configuration section and disallow setting Gurobi license credentials (WLSACCESSID, WLSSECRET, LICENSEID) in config files to prevent accidental exposure of sensitive credentials. Use environment variables or license files instead (https://github.com/PyPSA/pypsa-eur/pull/1989).
 
-  - New base network using TYNDP 2024 data modeling NTC transmission capacities as a transport model
-    (https://github.com/PyPSA/pypsa-eur/pull/1646).
+* Fix ConsistencyError for Links without buses when `gas_network: true`, but no `conventional_generation` (https://github.com/PyPSA/pypsa-eur/pull/1971)
 
-* **Improved power plants and industrial sites data:**
+* Fix ConsistencyError for Links without buses when `industry: true`, but no `conventional_generation` or `biomass` (https://github.com/PyPSA/pypsa-eur/pull/1971)
 
-  - Added powerplantmatching v0.8.0 to data versions. Wind and solar capacity updates for 2025. Nuclear power plants are now resolved by block (https://github.com/PyPSA/pypsa-eur/pull/2040).
+* Fix `mock_snakemake` due to breaking `snakemake` upstream API changes, i.e., requiring passing a `LoggerManager` instance (https://github.com/PyPSA/pypsa-eur/pull/1984).
 
-  - Enhanced renewable capacity estimation using plant-level data from Powerplantmatching. Renamed setting
-    ``from_gem`` to ``from_powerplantmatching``. New ``from_irenastat`` setting supplements capacity estimation
-    (https://github.com/PyPSA/pypsa-eur/pull/2050).
+* Added technology-data v0.13.4 (https://github.com/PyPSA/technology-data/releases/tag/v0.13.4) to data versions (https://github.com/PyPSA/pypsa-eur/pull/1985).
 
-  - Waste-to-energy plants now included in electricity-only networks (https://github.com/PyPSA/pypsa-eur/pull/2050).
-
-  - Updated GEM steel plant tracker and initial GEM cement plant tracker (https://github.com/PyPSA/pypsa-eur/pull/1830).
-
-* **Improved storage:**
-
-  - Added new storage technologies, including iron-air batteries. These can be configured as
-    either store-link combinations or standalone storage units. Implemented in both :mod:`add_electricity` and
-    :mod:`prepare_sector_network` (https://github.com/PyPSA/pypsa-eur/pull/1961).
-
-  - Existing battery storage capacities from Powerplantmatching can be added as ``StorageUnit`` components using
-    plant-level duration data (https://github.com/PyPSA/pypsa-eur/pull/2071).
-
-* **Updated technology parameters:**
-
-  - Added technology-data v0.13.4 to data versions (https://github.com/PyPSA/pypsa-eur/pull/1985).
-
-* **Better data, configuration and dependency management:**
-
-  - Data versions now version controlled in ``data/versions.csv`` with configurable per-scenario specifications
-    (https://github.com/PyPSA/pypsa-eur/pull/1675, https://github.com/PyPSA/pypsa-eur/pull/1963).
 
   - Use validation schema for configuration files. Schema contains default values;
     changes to ``config/config.default.yaml`` now require schema updates
