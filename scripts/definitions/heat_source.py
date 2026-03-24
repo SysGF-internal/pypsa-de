@@ -238,7 +238,7 @@ class HeatSource(Enum):
             HeatSource.HABER_BOSCH_WASTE: 3,
             HeatSource.METHANOLISATION_WASTE: 4,
             HeatSource.ELECTROLYSIS_WASTE: 2,
-            HeatSource.FUEL_CELL_waste: 2,
+            HeatSource.FUEL_CELL_WASTE: 2,
         }
         return mapping.get(self)
 
