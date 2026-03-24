@@ -2863,7 +2863,6 @@ def add_heat(
         else None
     )
 
-    district_heat_info = pd.read_csv(district_heat_share_file, index_col=0)
     dist_fraction = district_heat_info["district fraction of node"]
     urban_fraction = district_heat_info["urban fraction"]
 
@@ -3144,7 +3143,7 @@ def add_heat(
                 "Link",
                 heat_nodes,
                 suffix=f" {heat_system} water pits discharger",
-                bus0=nodes + f" {heat_system} water pits",
+                bus0=heat_nodes + f" {heat_system} water pits",
                 bus1=HeatSource.PTES.resource_bus(heat_nodes, heat_system),
                 carrier=f"{heat_system} water pits discharger",
                 efficiency=costs.at[

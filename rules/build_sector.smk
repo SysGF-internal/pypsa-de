@@ -543,7 +543,7 @@ rule build_lake_heat_potential:
     input:
         unpack(input_hera_data),
         lake_data=rules.retrieve_lake_data.output["lake_data"],
-        regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
+        regions_onshore=input_regions_onshore_district_heating,
         dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
     output:
         heat_source_power=resources(
@@ -1678,110 +1678,6 @@ rule build_district_heating_subnode_demands:
         "../scripts/build_district_heating_subnode_demands.py"
 
 
-rule build_district_heating_subnodes:
-    message:
-        "Building district heating subnodes and extending onshore regions for {wildcards.clusters} clusters"
-    params:
-        countries=config_provider("countries"),
-        subnode_countries=config_provider(
-            "sector", "district_heating", "subnodes", "countries"
-        ),
-        n_subnodes=config_provider(
-            "sector", "district_heating", "subnodes", "n_subnodes"
-        ),
-        demand_column=config_provider(
-            "sector", "district_heating", "subnodes", "demand_column"
-        ),
-        label_column=config_provider(
-            "sector", "district_heating", "subnodes", "label_column"
-        ),
-    input:
-        dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
-        regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
-        dh_city_lookup=resources("dh_city_lookup.csv"),
-    output:
-        dh_subnodes=resources("dh_subnodes_base_s_{clusters}.geojson"),
-        regions_onshore_extended=resources(
-            "regions_onshore_base_s_{clusters}_subnodes.geojson"
-        ),
-    resources:
-        mem_mb=2000,
-    log:
-        logs("build_district_heating_subnodes_s_{clusters}.log"),
-    benchmark:
-        benchmarks("build_district_heating_subnodes/s_{clusters}")
-    script:
-        "../scripts/build_district_heating_subnodes.py"
-
-
-rule build_district_heating_subnode_demands:
-    message:
-        "Building district heating subnode demand data for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
-    params:
-        district_heating_loss=config_provider(
-            "sector", "district_heating", "district_heating_loss"
-        ),
-        reduce_space_heat_exogenously=config_provider(
-            "sector", "reduce_space_heat_exogenously"
-        ),
-        reduce_space_heat_exogenously_factor=config_provider(
-            "sector", "reduce_space_heat_exogenously_factor"
-        ),
-        energy_totals_year=config_provider("energy", "energy_totals_year"),
-    input:
-        dh_subnodes=resources("dh_subnodes_base_s_{clusters}.geojson"),
-        district_heat_share=resources(
-            "district_heat_share_base_s_{clusters}_{planning_horizons}.csv"
-        ),
-        pop_weighted_energy_totals=resources(
-            "pop_weighted_energy_totals_s_{clusters}.csv"
-        ),
-        pop_weighted_heat_totals=resources("pop_weighted_heat_totals_s_{clusters}.csv"),
-        heating_efficiencies=resources("heating_efficiencies.csv"),
-        industrial_demand=resources(
-            "industrial_energy_demand_base_s_{clusters}_{planning_horizons}.csv"
-        ),
-        hourly_heat_demand=resources("hourly_heat_demand_total_base_s_{clusters}.nc"),
-        heat_dsm_profile=resources(
-            "residential_heat_dsm_profile_total_base_s_{clusters}.csv"
-        ),
-        dh_area_assumptions=lambda w: (
-            "data/dh_area_assumptions.csv"
-            if config_provider(
-                "sector", "district_heating", "subnodes", "use_isi_data_assumptions"
-            )(w)
-            else []
-        ),
-    output:
-        district_heat_share_subnodes=resources(
-            "district_heat_share_subnodes_base_s_{clusters}_{planning_horizons}.csv"
-        ),
-        pop_weighted_energy_totals_subnodes=resources(
-            "pop_weighted_energy_totals_subnodes_s_{clusters}_{planning_horizons}.csv"
-        ),
-        pop_weighted_heat_totals_subnodes=resources(
-            "pop_weighted_heat_totals_subnodes_s_{clusters}_{planning_horizons}.csv"
-        ),
-        industrial_demand_subnodes=resources(
-            "industrial_energy_demand_subnodes_base_s_{clusters}_{planning_horizons}.csv"
-        ),
-        hourly_heat_demand_subnodes=resources(
-            "hourly_heat_demand_total_subnodes_base_s_{clusters}_{planning_horizons}.nc"
-        ),
-        heat_dsm_profile_subnodes=resources(
-            "residential_heat_dsm_profile_total_subnodes_base_s_{clusters}_{planning_horizons}.csv"
-        ),
-    threads: 1
-    resources:
-        mem_mb=4000,
-    log:
-        logs("build_district_heating_subnode_demands_{clusters}_{planning_horizons}.log"),
-    benchmark:
-        benchmarks("build_district_heating_subnode_demands/s_{clusters}_{planning_horizons}")
-    script:
-        "../scripts/build_district_heating_subnode_demands.py"
-
-
 rule time_aggregation:
     message:
         "Performing time series aggregation for temporal resolution reduction for {wildcards.clusters} clusters and {wildcards.opts} electric options and {wildcards.sector_opts} sector options"
@@ -1938,7 +1834,7 @@ rule prepare_sector_network:
             else []
         ),
         network=resources("networks/base_s_{clusters}_elec_{opts}.nc"),
-        eurostat=rules.retrieve_eurostat_balances.output["directory"],
+        eurostat=resources("eurostat_energy_balances.csv"),
         pop_weighted_energy_totals=lambda w: (
             resources(
                 "pop_weighted_energy_totals_subnodes_s_{clusters}_{planning_horizons}.csv"
