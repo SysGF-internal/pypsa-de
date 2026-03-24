@@ -10,6 +10,9 @@ Release Notes
 Upcoming Release
 ================
 
+* Added option to model n largest district heating systems (according to demand in #1516) explicitly. Enable via ``sector: district_heating:
+  subnodes: enable: true``.
+  
 * Feat: added support for lake-water sourced heat pumps in district heating, based on data from HydroLakes and a methods from Triebs (https://github.com/PyPSA/pypsa-eur/pull/1951)
 
 * Refactor: Integrated excess heat from Power-to-X processes into the new heat-source structure and moved some code from `scripts/prepare_sector_network.py` to `scripts/def/heat_source.py`. Also updated PtX excess heat efficiencies (https://github.com/PyPSA/pypsa-eur/pull/1944).

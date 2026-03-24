@@ -17,6 +17,35 @@ from scripts.definitions.heat_system_type import HeatSystemType
 from scripts.lib.validation.config._base import ConfigModel
 
 
+class _SubnodesConfig(BaseModel):
+    """Configuration for `sector.district_heating.subnodes` settings."""
+
+    enable: bool = Field(
+        False,
+        description="Enable subnodes in district heating sector.",
+    )
+    n_subnodes: int = Field(
+        10,
+        description="Number of largest district heating subnodes that are explicitly represented in the network.",
+    )
+    countries: list[str] = Field(
+        [],
+        description="List of country codes to consider for district heating subnodes. If empty, all countries are considered.",
+    )
+    demand_column: str = Field(
+        "Dem_GWh",
+        description="Name of the column in the single-system level data to use for subnodes.",
+    )
+    label_column: str = Field(
+        "Label",
+        description="Name of the column in the single-system level data to use for subnode labels.",
+    )
+    use_isi_data_assumptions: bool = Field(
+        False,
+        description="Scale subnode demands to match the model's district heating demand per country, using the ISI DH area data's assumed national DH shares as denominator.",
+    )
+
+
 class _PtesConfig(BaseModel):
     """
     Configuration for `sector.district_heating.ptes` settings.
@@ -239,6 +268,14 @@ class _DistrictHeatingConfig(ConfigModel):
             "``scripts/definitions/heat_source.py`` and ``add_waste_heat()`` in "
             "``scripts/prepare_sector_network.py``."
         ),
+    )
+    subnodes: _SubnodesConfig = Field(
+        default_factory=_SubnodesConfig,
+        description="Configuration options for explicit representation of largest district heating systems as subnodes.",
+    )
+    subnodes: _SubnodesConfig = Field(
+        default_factory=_SubnodesConfig,
+        description="Configuration options for explicit representation of largest district heating systems as subnodes.",
     )
 
 
