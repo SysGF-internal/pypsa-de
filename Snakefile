@@ -164,7 +164,7 @@ rule all:
                 + "maps/static/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}-heat_source_temperature_map_river_water.html"
                 if config_provider("plotting", "enable_heat_source_maps")(w)
                 and "river_water"
-                in config_provider("sector", "heat_pump_sources", "urban central")(w)
+                in config_provider("sector", "heat_sources", "urban central")(w)
                 else []
             ),
             **config["scenario"],
@@ -176,7 +176,7 @@ rule all:
                 + "maps/static/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}-heat_source_temperature_map_sea_water.html"
                 if config_provider("plotting", "enable_heat_source_maps")(w)
                 and "sea_water"
-                in config_provider("sector", "heat_pump_sources", "urban central")(w)
+                in config_provider("sector", "heat_sources", "urban central")(w)
                 else []
             ),
             **config["scenario"],
@@ -188,7 +188,7 @@ rule all:
                 + "maps/static/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}-heat_source_temperature_map_ambient_air.html"
                 if config_provider("plotting", "enable_heat_source_maps")(w)
                 and "air"
-                in config_provider("sector", "heat_pump_sources", "urban central")(w)
+                in config_provider("sector", "heat_sources", "urban central")(w)
                 else []
             ),
             **config["scenario"],
@@ -201,7 +201,7 @@ rule all:
                 + "maps/static/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}-heat_source_energy_map_river_water.html"
                 if config_provider("plotting", "enable_heat_source_maps")(w)
                 and "river_water"
-                in config_provider("sector", "heat_pump_sources", "urban central")(w)
+                in config_provider("sector", "heat_sources", "urban central")(w)
                 else []
             ),
             **config["scenario"],

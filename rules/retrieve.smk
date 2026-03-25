@@ -8,6 +8,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from shutil import move, unpack_archive, rmtree, copy2
 from zipfile import ZipFile
+from pathlib import Path
 
 
 # Configure the default storage provider for accessing remote files using http
@@ -1665,6 +1666,39 @@ if (DH_AREAS_DATASET := dataset_version("dh_areas"))["source"] in [
         run:
             copy2(input["dh_areas"], output["dh_areas"])
 
+    # One-time Geonames download to map DH systems to cities without online geocoder
+    GEONAMES_CITIES_URL = "https://download.geonames.org/export/dump/cities500.zip"
+
+    rule retrieve_geonames_cities:
+        message:
+            "Retrieving Geonames cities500 dataset for DH city lookup"
+        input:
+            zip=storage(GEONAMES_CITIES_URL),
+        output:
+            zip="data/geonames/cities500.zip",
+            txt="data/geonames/cities500.txt",
+        log:
+            "logs/retrieve_geonames_cities.log",
+        run:
+            Path("data/geonames").mkdir(parents=True, exist_ok=True)
+            copy2(input["zip"], output["zip"])
+            with ZipFile(output["zip"]) as zf:
+                with zf.open("cities500.txt") as src, open(output["txt"], "wb") as dst:
+                    dst.write(src.read())
+
+    rule map_dh_systems_to_cities:
+        message:
+            "Mapping DH systems to nearest cities"
+        input:
+            dh_areas=rules.retrieve_dh_areas.output["dh_areas"],
+            cities=rules.retrieve_geonames_cities.output["txt"],
+        output:
+            resources("dh_city_lookup.csv"),
+        log:
+            logs("map_dh_systems_to_cities.log"),
+        script:
+            "../scripts/map_dh_systems_to_cities.py"
+
 
 if (MOBILITY_PROFILES_DATASET := dataset_version("mobility_profiles"))["source"] in [
     "archive"
@@ -1689,3 +1723,24 @@ if (MOBILITY_PROFILES_DATASET := dataset_version("mobility_profiles"))["source"]
         run:
             copy2(input["kfz"], output["kfz"])
             copy2(input["pkw"], output["pkw"])
+
+
+if (LAKE_DATA_DATASET := dataset_version("lake_data"))["source"] in [
+    "primary",
+    "archive",
+]:
+
+    rule retrieve_lake_data:
+        input:
+            zip_file=storage(LAKE_DATA_DATASET["url"]),
+        output:
+            zip_file=f"{LAKE_DATA_DATASET['folder']}/HydroLAKES_polys_v10.gdb.zip",
+            lake_data=directory(
+                f"{LAKE_DATA_DATASET['folder']}/HydroLAKES_polys_v10.gdb/HydroLAKES_polys_v10.gdb"
+            ),
+        run:
+            copy2(input["zip_file"], output["zip_file"])
+            unpack_archive(
+                output["zip_file"],
+                output["lake_data"],
+            )

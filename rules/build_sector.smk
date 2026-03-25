@@ -3,6 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 
+def input_regions_onshore_district_heating(w):
+    """Return extended regions file when subnodes enabled, else standard regions."""
+    if config_provider("sector", "district_heating", "subnodes", "enable")(w):
+        return resources("regions_onshore_base_s_{clusters}_subnodes.geojson")
+    else:
+        return resources("regions_onshore_base_s_{clusters}.geojson")
+
+
 rule build_population_layouts:
     message:
         "Building population layout data (total, urban, rural) from NUTS3 shapes and World Bank statistics"
@@ -205,11 +213,7 @@ rule build_temperature_profiles:
         drop_leap_day=config_provider("enable", "drop_leap_day"),
     input:
         pop_layout=resources("pop_layout_total.nc"),
-        regions_onshore=lambda w: (
-            resources("regions_onshore_base-extended_s_{clusters}.geojson")
-            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
-            else resources("regions_onshore_base_s_{clusters}.geojson")
-        ),
+        regions_onshore=input_regions_onshore_district_heating,
         cutout=lambda w: input_cutout(
             w, config_provider("sector", "heat_demand_cutout")(w)
         ),
@@ -278,11 +282,7 @@ rule build_central_heating_temperature_profiles:
         energy_totals_year=config_provider("energy", "energy_totals_year"),
     input:
         temp_air_total=resources("temp_air_total_base_s_{clusters}.nc"),
-        regions_onshore=lambda w: (
-            resources("regions_onshore_base-extended_s_{clusters}.geojson")
-            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
-            else resources("regions_onshore_base_s_{clusters}.geojson")
-        ),
+        regions_onshore=input_regions_onshore_district_heating,
     output:
         central_heating_forward_temperature_profiles=resources(
             "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
@@ -331,40 +331,46 @@ rule build_geothermal_heat_potential:
     params:
         drop_leap_day=config_provider("enable", "drop_leap_day"),
         countries=config_provider("countries"),
-        constant_temperature_celsius=config_provider(
+        source_temperature=config_provider(
             "sector",
             "district_heating",
-            "limited_heat_sources",
+            "heat_source_temperatures",
             "geothermal",
-            "constant_temperature_celsius",
         ),
-        ignore_missing_regions=config_provider(
+        ignore_missing_geothermal_data=config_provider(
             "sector",
             "district_heating",
-            "limited_heat_sources",
-            "geothermal",
-            "ignore_missing_regions",
+            "ignore_missing_geothermal_data",
+        ),
+        heat_source_cooling=config_provider(
+            "sector", "district_heating", "heat_source_cooling"
         ),
     input:
         isi_heat_potentials=rules.retrieve_geothermal_heat_utilisation_potentials.output[
             "isi_heat_potentials"
         ],
-        regions_onshore=lambda w: (
-            resources("regions_onshore_base-restricted_s_{clusters}.geojson")
-            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
-            else resources("regions_onshore_base_s_{clusters}.geojson")
+        regions_onshore=input_regions_onshore_district_heating,
+        central_heating_forward_temperature_profiles=resources(
+            "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
+        ),
+        central_heating_return_temperature_profiles=resources(
+            "central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
         lau_regions=rules.retrieve_lau_regions.output["zip"],
     output:
         heat_source_power=resources(
-            "heat_source_power_geothermal_base_s_{clusters}.csv"
+            "heat_source_power_geothermal_base_s_{clusters}_{planning_horizons}.csv"
         ),
     resources:
         mem_mb=2000,
     log:
-        logs("build_heat_source_potentials_geothermal_s_{clusters}.log"),
+        logs(
+            "build_heat_source_potentials_geothermal_s_{clusters}_{planning_horizons}.log"
+        ),
     benchmark:
-        benchmarks("build_heat_source_potentials/geothermal_s_{clusters}")
+        benchmarks(
+            "build_heat_source_potentials/geothermal_s_{clusters}_{planning_horizons}"
+        )
     script:
         scripts("build_geothermal_heat_potential.py")
 
@@ -425,7 +431,7 @@ rule build_ates_potentials:
     input:
         aquifer_shapes_shp=rules.retrieve_aquifer_data_bgr.output["aquifer_shapes"][0],
         dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
-        regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
+        regions_onshore=input_regions_onshore_district_heating,
         central_heating_forward_temperature_profiles=resources(
             "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
@@ -489,6 +495,8 @@ def input_hera_data(w) -> dict[str, str]:
 
 
 rule build_river_heat_potential:
+    message:
+        "Building river water heat potential for {wildcards.clusters} clusters"
     params:
         drop_leap_day=config_provider("enable", "drop_leap_day"),
         snapshots=config_provider("snapshots"),
@@ -498,7 +506,7 @@ rule build_river_heat_potential:
         enable_heat_source_maps=config_provider("plotting", "enable_heat_source_maps"),
     input:
         unpack(input_hera_data),
-        regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
+        regions_onshore=input_regions_onshore_district_heating,
         dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
     output:
         heat_source_power=resources(
@@ -522,6 +530,41 @@ rule build_river_heat_potential:
         scripts(
             "build_surface_water_heat_potentials/build_river_water_heat_potential.py"
         )
+
+
+rule build_lake_heat_potential:
+    params:
+        drop_leap_day=config_provider("enable", "drop_leap_day"),
+        snapshots=config_provider("snapshots"),
+        dh_area_buffer=config_provider(
+            "sector", "district_heating", "dh_areas", "buffer"
+        ),
+        enable_heat_source_maps=config_provider("plotting", "enable_heat_source_maps"),
+    input:
+        unpack(input_hera_data),
+        lake_data=rules.retrieve_lake_data.output["lake_data"],
+        regions_onshore=input_regions_onshore_district_heating,
+        dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
+    output:
+        heat_source_power=resources(
+            "heat_source_power_lake_water_base_s_{clusters}.csv"
+        ),
+        heat_source_temperature=resources("temp_lake_water_base_s_{clusters}.nc"),
+        heat_source_temperature_temporal_aggregate=resources(
+            "temp_lake_water_base_s_{clusters}_temporal_aggregate.nc"
+        ),
+        heat_source_energy_temporal_aggregate=resources(
+            "heat_source_energy_lake_water_base_s_{clusters}_temporal_aggregate.nc"
+        ),
+    resources:
+        mem_mb=20000,
+    log:
+        logs("build_lake_water_heat_potential_base_s_{clusters}.log"),
+    benchmark:
+        benchmarks("build_lake_water_heat_potential_base_s_{clusters}")
+    threads: 1
+    script:
+        "../scripts/build_surface_water_heat_potentials/build_lake_water_heat_potential.py"
 
 
 def input_heat_source_temperature(
@@ -549,48 +592,58 @@ def input_heat_source_temperature(
         for heat sources that require temperature profiles (excludes constant
         temperature sources).
     """
+    from scripts.definitions.heat_source import HeatSource
 
-    heat_pump_sources = set(
-        config_provider("sector", "heat_pump_sources", "urban central")(w)
+    heat_sources = set(
+        config_provider("sector", "heat_sources", "urban central")(w)
     ).union(
-        config_provider("sector", "heat_pump_sources", "urban decentral")(w),
-        config_provider("sector", "heat_pump_sources", "rural")(w),
+        config_provider("sector", "heat_sources", "urban decentral")(w),
+        config_provider("sector", "heat_sources", "rural")(w),
     )
 
-    is_limited_heat_source = {
-        heat_source_name: heat_source_name
-        in config_provider("sector", "district_heating", "limited_heat_sources")(w)
-        for heat_source_name in heat_pump_sources
-    }
+    file_names = {}
+    for heat_source_name in heat_sources:
+        heat_source = HeatSource(heat_source_name)
+        # Skip heat sources with temperatures defined in config (not from file)
+        if heat_source.temperature_from_config:
+            continue
+        if heat_source_name == "ptes":
+            file_names[f"temp_{heat_source_name}"] = resources(
+                f"temp_{replace_names.get(heat_source_name, heat_source_name)}_base_s_{{clusters}}_{{planning_horizons}}.nc"
+            )
+        else:
+            file_names[f"temp_{heat_source_name}"] = resources(
+                f"temp_{replace_names.get(heat_source_name, heat_source_name)}_base_s_{{clusters}}.nc"
+            )
+    return file_names
 
-    has_constant_temperature = {
-        heat_source_name: (
-            False
-            if not is_limited_heat_source[heat_source_name]
-            else config_provider(
-                "sector",
-                "district_heating",
-                "limited_heat_sources",
-                heat_source_name,
-                "constant_temperature_celsius",
-            )(w)
-        )
-        for heat_source_name in heat_pump_sources
-    }
 
-    # replace names for soil and air temperature files
-    return {
-        f"temp_{heat_source_name}": resources(
-            "temp_"
-            + replace_names.get(heat_source_name, heat_source_name)
-            + "_base_s_{clusters}"
-            + ("_{planning_horizons}" if heat_source_name == "ptes" else "")
-            + ".nc"
-        )
-        for heat_source_name in heat_pump_sources
-        # remove heat sources with constant temperature - i.e. no temperature profile file
-        if not has_constant_temperature[heat_source_name]
-    }
+def input_ptes_bottom_temperature(w) -> dict[str, str]:
+    """
+    Generate conditional input for PTES bottom temperature profiles.
+
+    Only includes the input file if PTES is configured as a heat source
+    for urban central heating.
+
+    Parameters
+    ----------
+    w : snakemake.io.Wildcards
+        Snakemake wildcards object.
+
+    Returns
+    -------
+    dict[str, str]
+        Dictionary with "temp_ptes_bottom" key if PTES is a heat source,
+        empty dict otherwise.
+    """
+    heat_sources = config_provider("sector", "heat_sources", "urban central")(w)
+    if "ptes" in heat_sources:
+        return {
+            "temp_ptes_bottom": resources(
+                "temp_ptes_bottom_profiles_base_s_{clusters}_{planning_horizons}.nc"
+            )
+        }
+    return {}
 
 
 def input_seawater_temperature(w) -> dict[str, str]:
@@ -624,6 +677,8 @@ def input_seawater_temperature(w) -> dict[str, str]:
 
 
 rule build_sea_heat_potential:
+    message:
+        "Building sea water heat potential for {wildcards.clusters} clusters"
     params:
         drop_leap_day=config_provider("enable", "drop_leap_day"),
         snapshots=config_provider("snapshots"),
@@ -633,7 +688,7 @@ rule build_sea_heat_potential:
     input:
         # seawater_temperature=lambda w: input_seawater_temperature(w),
         unpack(input_seawater_temperature),
-        regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
+        regions_onshore=input_regions_onshore_district_heating,
         dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
     output:
         heat_source_temperature=resources("temp_sea_water_base_s_{clusters}.nc"),
@@ -664,9 +719,9 @@ rule build_cop_profiles:
         heat_pump_cop_approximation_central_heating=config_provider(
             "sector", "district_heating", "heat_pump_cop_approximation"
         ),
-        heat_pump_sources=config_provider("sector", "heat_pump_sources"),
-        limited_heat_sources=config_provider(
-            "sector", "district_heating", "limited_heat_sources"
+        heat_sources=config_provider("sector", "heat_sources"),
+        heat_source_temperatures=config_provider(
+            "sector", "district_heating", "heat_source_temperatures"
         ),
         snapshots=config_provider("snapshots"),
     input:
@@ -677,11 +732,7 @@ rule build_cop_profiles:
         central_heating_return_temperature_profiles=resources(
             "central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
-        regions_onshore=lambda w: (
-            resources("regions_onshore_base-extended_s_{clusters}.geojson")
-            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
-            else resources("regions_onshore_base_s_{clusters}.geojson")
-        ),
+        regions_onshore=input_regions_onshore_district_heating,
     output:
         cop_profiles=resources("cop_profiles_base_s_{clusters}_{planning_horizons}.nc"),
     resources:
@@ -698,19 +749,40 @@ rule build_ptes_operations:
     message:
         "Building thermal energy storage operations profiles for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
     params:
-        max_ptes_top_temperature=config_provider(
+        top_temperature=config_provider(
             "sector",
             "district_heating",
             "ptes",
-            "max_top_temperature",
+            "top_temperature",
         ),
-        min_ptes_bottom_temperature=config_provider(
+        bottom_temperature=config_provider(
             "sector",
             "district_heating",
             "ptes",
-            "min_bottom_temperature",
+            "bottom_temperature",
         ),
         snapshots=config_provider("snapshots"),
+        charge_boosting_required=config_provider(
+            "sector", "district_heating", "ptes", "charge_boosting_required"
+        ),
+        discharge_resistive_boosting=config_provider(
+            "sector", "district_heating", "ptes", "discharge_resistive_boosting"
+        ),
+        temperature_dependent_capacity=config_provider(
+            "sector", "district_heating", "ptes", "temperature_dependent_capacity"
+        ),
+        design_top_temperature=config_provider(
+            "sector",
+            "district_heating",
+            "ptes",
+            "design_top_temperature",
+        ),
+        design_bottom_temperature=config_provider(
+            "sector",
+            "district_heating",
+            "ptes",
+            "design_bottom_temperature",
+        ),
     input:
         central_heating_forward_temperature_profiles=resources(
             "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
@@ -718,16 +790,19 @@ rule build_ptes_operations:
         central_heating_return_temperature_profiles=resources(
             "central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
-        regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
+        regions_onshore=input_regions_onshore_district_heating,
     output:
-        ptes_direct_utilisation_profiles=resources(
-            "ptes_direct_utilisation_profiles_base_s_{clusters}_{planning_horizons}.nc"
-        ),
         ptes_top_temperature_profiles=resources(
             "temp_ptes_top_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
+        ptes_bottom_temperature_profiles=resources(
+            "temp_ptes_bottom_profiles_base_s_{clusters}_{planning_horizons}.nc"
+        ),
         ptes_e_max_pu_profiles=resources(
             "ptes_e_max_pu_profiles_base_s_{clusters}_{planning_horizons}.nc"
+        ),
+        ptes_boost_per_discharge_profiles=resources(
+            "ptes_boost_per_discharge_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
     resources:
         mem_mb=2000,
@@ -739,37 +814,47 @@ rule build_ptes_operations:
         scripts("build_ptes_operations/run.py")
 
 
-rule build_direct_heat_source_utilisation_profiles:
+rule build_heat_source_utilisation_profiles:
     message:
-        "Building direct heat source utilization profiles for industrial applications for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
+        "Building heat source utilization profiles for district heating for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
     params:
-        direct_utilisation_heat_sources=config_provider(
-            "sector", "district_heating", "direct_utilisation_heat_sources"
-        ),
-        limited_heat_sources=config_provider(
-            "sector", "district_heating", "limited_heat_sources"
+        heat_sources=config_provider("sector", "heat_sources", "urban central"),
+        heat_source_cooling=config_provider(
+            "sector", "district_heating", "heat_source_cooling"
         ),
         snapshots=config_provider("snapshots"),
+        heat_source_temperatures=config_provider(
+            "sector", "district_heating", "heat_source_temperatures"
+        ),
+        ptes_enable=config_provider("sector", "district_heating", "ptes", "enable"),
     input:
+        unpack(input_heat_source_temperature),
+        unpack(input_ptes_bottom_temperature),
         central_heating_forward_temperature_profiles=resources(
             "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
+        central_heating_return_temperature_profiles=resources(
+            "central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
+        ),
     output:
-        direct_heat_source_utilisation_profiles=resources(
-            "direct_heat_source_utilisation_profiles_base_s_{clusters}_{planning_horizons}.nc"
+        heat_source_direct_utilisation_profiles=resources(
+            "heat_source_direct_utilisation_profiles_base_s_{clusters}_{planning_horizons}.nc"
+        ),
+        heat_source_preheater_utilisation_profiles=resources(
+            "heat_source_preheater_utilisation_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
     resources:
         mem_mb=20000,
     log:
         logs(
-            "build_direct_heat_source_utilisation_profiles_s_{clusters}_{planning_horizons}.log"
+            "build_heat_source_utilisation_profiles_s_{clusters}_{planning_horizons}.log"
         ),
     benchmark:
         benchmarks(
-            "build_direct_heat_source_utilisation_profiles/s_{clusters}_{planning_horizons}"
+            "build_heat_source_utilisation_profiles/s_{clusters}_{planning_horizons}"
         )
     script:
-        scripts("build_direct_heat_source_utilisation_profiles.py")
+        scripts("build_heat_source_utilisation_profiles.py")
 
 
 rule build_solar_thermal_profiles:
@@ -781,7 +866,7 @@ rule build_solar_thermal_profiles:
         solar_thermal=config_provider("solar_thermal"),
     input:
         pop_layout=resources("pop_layout_total.nc"),
-        regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
+        regions_onshore=input_regions_onshore_district_heating,
         cutout=lambda w: input_cutout(w, config_provider("solar_thermal", "cutout")(w)),
     output:
         solar_thermal=resources("solar_thermal_total_base_s_{clusters}.nc"),
@@ -876,7 +961,7 @@ if (COUNTRY_HDD_DATASET := dataset_version("country_hdd"))["source"] in ["build"
             cutouts=["cutouts/europe-1940-2024-era5.nc"],
             country_shapes=resources("country_shapes.geojson"),
         output:
-            era5_hdd=f"{COUNTRY_HDD_DATASET['folder']}/era5-HDD-per-country.csv",
+            era5_hdd=f"{COUNTRY_HDD_DATASET["folder"]}/era5-HDD-per-country.csv",
         log:
             logs("build_country_hdd.log"),
         benchmark:
@@ -889,7 +974,7 @@ rule build_heat_totals:
     message:
         "Building heat totals"
     input:
-        hdd=f"{COUNTRY_HDD_DATASET['folder']}/era5-HDD-per-country.csv",
+        hdd=f"{COUNTRY_HDD_DATASET["folder"]}/era5-HDD-per-country.csv",
         energy_totals=resources("energy_totals.csv"),
     output:
         heat_totals=resources("heat_totals.csv"),
@@ -1411,8 +1496,8 @@ rule build_transport_demand:
             "pop_weighted_energy_totals_s_{clusters}.csv"
         ),
         transport_data=resources("transport_data.csv"),
-        traffic_data_KFZ=f"{MOBILITY_PROFILES_DATASET['folder']}/kfz.csv",
-        traffic_data_Pkw=f"{MOBILITY_PROFILES_DATASET['folder']}/pkw.csv",
+        traffic_data_KFZ=f"{MOBILITY_PROFILES_DATASET["folder"]}/kfz.csv",
+        traffic_data_Pkw=f"{MOBILITY_PROFILES_DATASET["folder"]}/pkw.csv",
         temp_air_total=resources("temp_air_total_base_s_{clusters}.nc"),
     output:
         transport_demand=resources("transport_demand_s_{clusters}.csv"),
@@ -1491,6 +1576,110 @@ rule build_existing_heating_distribution:
         scripts("build_existing_heating_distribution.py")
 
 
+rule build_district_heating_subnodes:
+    message:
+        "Building district heating subnodes and extending onshore regions for {wildcards.clusters} clusters"
+    params:
+        countries=config_provider("countries"),
+        subnode_countries=config_provider(
+            "sector", "district_heating", "subnodes", "countries"
+        ),
+        n_subnodes=config_provider(
+            "sector", "district_heating", "subnodes", "n_subnodes"
+        ),
+        demand_column=config_provider(
+            "sector", "district_heating", "subnodes", "demand_column"
+        ),
+        label_column=config_provider(
+            "sector", "district_heating", "subnodes", "label_column"
+        ),
+    input:
+        dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
+        regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
+        dh_city_lookup=resources("dh_city_lookup.csv"),
+    output:
+        dh_subnodes=resources("dh_subnodes_base_s_{clusters}.geojson"),
+        regions_onshore_extended=resources(
+            "regions_onshore_base_s_{clusters}_subnodes.geojson"
+        ),
+    resources:
+        mem_mb=2000,
+    log:
+        logs("build_district_heating_subnodes_s_{clusters}.log"),
+    benchmark:
+        benchmarks("build_district_heating_subnodes/s_{clusters}")
+    script:
+        "../scripts/build_district_heating_subnodes.py"
+
+
+rule build_district_heating_subnode_demands:
+    message:
+        "Building district heating subnode demand data for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
+    params:
+        district_heating_loss=config_provider(
+            "sector", "district_heating", "district_heating_loss"
+        ),
+        reduce_space_heat_exogenously=config_provider(
+            "sector", "reduce_space_heat_exogenously"
+        ),
+        reduce_space_heat_exogenously_factor=config_provider(
+            "sector", "reduce_space_heat_exogenously_factor"
+        ),
+        energy_totals_year=config_provider("energy", "energy_totals_year"),
+    input:
+        dh_subnodes=resources("dh_subnodes_base_s_{clusters}.geojson"),
+        district_heat_share=resources(
+            "district_heat_share_base_s_{clusters}_{planning_horizons}.csv"
+        ),
+        pop_weighted_energy_totals=resources(
+            "pop_weighted_energy_totals_s_{clusters}.csv"
+        ),
+        pop_weighted_heat_totals=resources("pop_weighted_heat_totals_s_{clusters}.csv"),
+        heating_efficiencies=resources("heating_efficiencies.csv"),
+        industrial_demand=resources(
+            "industrial_energy_demand_base_s_{clusters}_{planning_horizons}.csv"
+        ),
+        hourly_heat_demand=resources("hourly_heat_demand_total_base_s_{clusters}.nc"),
+        heat_dsm_profile=resources(
+            "residential_heat_dsm_profile_total_base_s_{clusters}.csv"
+        ),
+        dh_area_assumptions=lambda w: (
+            "data/dh_area_assumptions.csv"
+            if config_provider(
+                "sector", "district_heating", "subnodes", "use_isi_data_assumptions"
+            )(w)
+            else []
+        ),
+    output:
+        district_heat_share_subnodes=resources(
+            "district_heat_share_subnodes_base_s_{clusters}_{planning_horizons}.csv"
+        ),
+        pop_weighted_energy_totals_subnodes=resources(
+            "pop_weighted_energy_totals_subnodes_s_{clusters}_{planning_horizons}.csv"
+        ),
+        pop_weighted_heat_totals_subnodes=resources(
+            "pop_weighted_heat_totals_subnodes_s_{clusters}_{planning_horizons}.csv"
+        ),
+        industrial_demand_subnodes=resources(
+            "industrial_energy_demand_subnodes_base_s_{clusters}_{planning_horizons}.csv"
+        ),
+        hourly_heat_demand_subnodes=resources(
+            "hourly_heat_demand_total_subnodes_base_s_{clusters}_{planning_horizons}.nc"
+        ),
+        heat_dsm_profile_subnodes=resources(
+            "residential_heat_dsm_profile_total_subnodes_base_s_{clusters}_{planning_horizons}.csv"
+        ),
+    threads: 1
+    resources:
+        mem_mb=4000,
+    log:
+        logs("build_district_heating_subnode_demands_{clusters}_{planning_horizons}.log"),
+    benchmark:
+        benchmarks("build_district_heating_subnode_demands/s_{clusters}_{planning_horizons}")
+    script:
+        "../scripts/build_district_heating_subnode_demands.py"
+
+
 rule time_aggregation:
     message:
         "Performing time series aggregation for temporal resolution reduction for {wildcards.clusters} clusters and {wildcards.opts} electric options and {wildcards.sector_opts} sector options"
@@ -1566,18 +1755,27 @@ rule build_egs_potentials:
 
 def input_heat_source_power(w):
 
-    return {
-        heat_source_name: resources(
-            "heat_source_power_" + heat_source_name + "_base_s_{clusters}.csv"
-        )
-        for heat_source_name in config_provider(
-            "sector", "heat_pump_sources", "urban central"
-        )(w)
-        if heat_source_name
-        in config_provider("sector", "district_heating", "limited_heat_sources")(
-            w
-        ).keys()
-    }
+    from scripts.definitions.heat_source import HeatSource
+
+    result = {}
+    heat_sources = config_provider("sector", "heat_sources", "urban central")(w)
+
+    for heat_source_name in heat_sources:
+        if HeatSource(heat_source_name).requires_generator:
+            if HeatSource(heat_source_name) == HeatSource.GEOTHERMAL:
+                result[heat_source_name] = resources(
+                    "heat_source_power_"
+                    + heat_source_name
+                    + "_base_s_{clusters}_{planning_horizons}.csv"
+                )
+            else:
+                result[heat_source_name] = resources(
+                    "heat_source_power_" + heat_source_name + "_base_s_{clusters}.csv"
+                )
+        else:
+            continue
+
+    return result
 
 
 rule prepare_sector_network:
@@ -1604,18 +1802,8 @@ rule prepare_sector_network:
         electricity=config_provider("electricity"),
         biomass=config_provider("biomass"),
         RDIR=RDIR,
-        heat_pump_sources=config_provider("sector", "heat_pump_sources"),
-        heat_systems=config_provider("sector", "heat_systems"),
+        heat_sources=config_provider("sector", "heat_sources"),
         energy_totals_year=config_provider("energy", "energy_totals_year"),
-        direct_utilisation_heat_sources=config_provider(
-            "sector", "district_heating", "direct_utilisation_heat_sources"
-        ),
-        limited_heat_sources=config_provider(
-            "sector", "district_heating", "limited_heat_sources"
-        ),
-        temperature_limited_stores=config_provider(
-            "sector", "district_heating", "temperature_limited_stores"
-        ),
     input:
         unpack(input_profile_offwind),
         unpack(input_heat_source_power),
@@ -1649,17 +1837,31 @@ rule prepare_sector_network:
         ),
         network=resources("networks/base_s_{clusters}_elec_{opts}.nc"),
         eurostat=resources("eurostat_energy_balances.csv"),
-        pop_weighted_energy_totals=resources(
-            "pop_weighted_energy_totals_s_{clusters}.csv"
+        pop_weighted_energy_totals=lambda w: (
+            resources(
+                "pop_weighted_energy_totals_subnodes_s_{clusters}_{planning_horizons}.csv"
+            )
+            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
+            else resources("pop_weighted_energy_totals_s_{clusters}.csv")
         ),
-        pop_weighted_heat_totals=resources("pop_weighted_heat_totals_s_{clusters}.csv"),
+        pop_weighted_heat_totals=lambda w: (
+            resources(
+                "pop_weighted_heat_totals_subnodes_s_{clusters}_{planning_horizons}.csv"
+            )
+            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
+            else resources("pop_weighted_heat_totals_s_{clusters}.csv")
+        ),
         shipping_demand=resources("shipping_demand_s_{clusters}.csv"),
         transport_demand=resources("transport_demand_s_{clusters}.csv"),
         transport_data=resources("transport_data_s_{clusters}.csv"),
         avail_profile=resources("avail_profile_s_{clusters}.csv"),
         dsm_profile=resources("dsm_profile_s_{clusters}.csv"),
-        heat_dsm_profile=resources(
-            "residential_heat_dsm_profile_total_base_s_{clusters}.csv"
+        heat_dsm_profile=lambda w: (
+            resources(
+                "residential_heat_dsm_profile_total_subnodes_base_s_{clusters}_{planning_horizons}.csv"
+            )
+            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
+            else resources("residential_heat_dsm_profile_total_base_s_{clusters}.csv")
         ),
         co2_totals_name=resources("co2_totals.csv"),
         co2=rules.retrieve_ghg_emissions.output["csv"],
@@ -1667,7 +1869,7 @@ rule prepare_sector_network:
             "biomass_potentials_s_{clusters}_{planning_horizons}.csv"
         ),
         costs=lambda w: (
-            resources(f"costs_{config_provider('costs', 'year')(w)}_processed.csv")
+            resources(f"costs_{config_provider("costs", "year")(w)}_processed.csv")
             if config_provider("foresight")(w) == "overnight"
             else resources("costs_{planning_horizons}_processed.csv")
         ),
@@ -1675,17 +1877,38 @@ rule prepare_sector_network:
         busmap_s=resources("busmap_base_s.csv"),
         busmap=resources("busmap_base_s_{clusters}.csv"),
         clustered_pop_layout=resources("pop_layout_base_s_{clusters}.csv"),
-        industrial_demand=resources(
-            "industrial_energy_demand_base_s_{clusters}_{planning_horizons}.csv"
+        industrial_demand=lambda w: (
+            resources(
+                "industrial_energy_demand_subnodes_base_s_{clusters}_{planning_horizons}.csv"
+            )
+            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
+            else resources(
+                "industrial_energy_demand_base_s_{clusters}_{planning_horizons}.csv"
+            )
         ),
-        hourly_heat_demand_total=resources(
-            "hourly_heat_demand_total_base_s_{clusters}.nc"
+        hourly_heat_demand_total=lambda w: (
+            resources(
+                "hourly_heat_demand_total_subnodes_base_s_{clusters}_{planning_horizons}.nc"
+            )
+            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
+            else resources("hourly_heat_demand_total_base_s_{clusters}.nc")
         ),
         industrial_production=resources(
             "industrial_production_base_s_{clusters}_{planning_horizons}.csv"
         ),
-        district_heat_share=resources(
-            "district_heat_share_base_s_{clusters}_{planning_horizons}-modified.csv"
+        district_heat_share=lambda w: (
+            resources(
+                "district_heat_share_subnodes_base_s_{clusters}_{planning_horizons}.csv"
+            )
+            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
+            else resources(
+                "district_heat_share_base_s_{clusters}_{planning_horizons}.csv"
+            )
+        ),
+        dh_subnodes=lambda w: (
+            resources("dh_subnodes_base_s_{clusters}.geojson")
+            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
+            else []
         ),
         heating_efficiencies=resources("heating_efficiencies.csv"),
         temp_soil_total=resources("temp_soil_total_base_s_{clusters}.nc"),
@@ -1695,18 +1918,34 @@ rule prepare_sector_network:
             resources(
                 "ptes_e_max_pu_profiles_base_s_{clusters}_{planning_horizons}.nc"
             )
-            if config_provider(
-                "sector", "district_heating", "ptes", "dynamic_capacity"
+            if config_provider("sector", "district_heating", "ptes", "enable")(w)
+            and config_provider(
+                "sector", "district_heating", "ptes", "temperature_dependent_capacity"
             )(w)
             else []
         ),
-        ptes_direct_utilisation_profiles=lambda w: (
+        ptes_boost_per_discharge_profiles=lambda w: (
             resources(
-                "ptes_direct_utilisation_profiles_base_s_{clusters}_{planning_horizons}.nc"
+                "ptes_boost_per_discharge_profiles_base_s_{clusters}_{planning_horizons}.nc"
             )
-            if config_provider(
-                "sector", "district_heating", "ptes", "supplemental_heating", "enable"
+            if config_provider("sector", "district_heating", "ptes", "enable")(w)
+            and config_provider(
+                "sector", "district_heating", "ptes", "discharge_resistive_boosting"
             )(w)
+            else []
+        ),
+        heat_source_direct_utilisation_profiles=lambda w: (
+            resources(
+                "heat_source_direct_utilisation_profiles_base_s_{clusters}_{planning_horizons}.nc"
+            )
+            if len(config_provider("sector", "heat_sources", "urban central")(w)) > 0
+            else []
+        ),
+        heat_source_preheater_utilisation_profiles=lambda w: (
+            resources(
+                "heat_source_preheater_utilisation_profiles_base_s_{clusters}_{planning_horizons}.nc"
+            )
+            if len(config_provider("sector", "heat_sources", "urban central")(w)) > 0
             else []
         ),
         solar_thermal_total=lambda w: (
@@ -1733,9 +1972,6 @@ rule prepare_sector_network:
             resources("egs_capacity_factors_{clusters}.csv")
             if config_provider("sector", "enhanced_geothermal", "enable")(w)
             else []
-        ),
-        direct_heat_source_utilisation_profiles=resources(
-            "direct_heat_source_utilisation_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
         ates_potentials=lambda w: (
             resources("ates_potentials_base_s_{clusters}_{planning_horizons}.csv")

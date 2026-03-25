@@ -8,11 +8,131 @@ Sector configuration.
 See docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#sector
 """
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from scripts.definitions.heat_source import HeatSource
+from scripts.definitions.heat_system_type import HeatSystemType
 from scripts.lib.validation.config._base import ConfigModel
+
+
+class _SubnodesConfig(BaseModel):
+    """Configuration for `sector.district_heating.subnodes` settings."""
+
+    enable: bool = Field(
+        False,
+        description="Enable subnodes in district heating sector.",
+    )
+    n_subnodes: int = Field(
+        10,
+        description="Number of largest district heating subnodes that are explicitly represented in the network.",
+    )
+    countries: list[str] = Field(
+        [],
+        description="List of country codes to consider for district heating subnodes. If empty, all countries are considered.",
+    )
+    demand_column: str = Field(
+        "Dem_GWh",
+        description="Name of the column in the single-system level data to use for subnodes.",
+    )
+    label_column: str = Field(
+        "Label",
+        description="Name of the column in the single-system level data to use for subnode labels.",
+    )
+    use_isi_data_assumptions: bool = Field(
+        False,
+        description="Scale subnode demands to match the model's district heating demand per country, using the ISI DH area data's assumed national DH shares as denominator.",
+    )
+
+
+class _PtesConfig(BaseModel):
+    """
+    Configuration for `sector.district_heating.ptes` settings.
+
+    Pit thermal energy storage [PTES] settings. PTES is used only in district heating.
+    See `prepare_sector_network <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-prepare_sector_network>`_
+    and `build_ptes_operations <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-build_ptes_operations>`_.
+    """
+
+    enable: bool = Field(
+        True,
+        description="Enable PTES. The function `add_heat()` in `prepare_sector_network` then adds the stores "
+        "`<node> urban central water pits` as well as the links `<node> urban central water pits charger` "
+        "and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
+    )
+    temperature_dependent_capacity: bool = Field(
+        False,
+        description="If True, the energy capacity is scaled as "
+        "`e_nom_pu=(top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature)`. "
+        "See `build_ptes_operations`.",
+    )
+    charge_boosting_required: bool = Field(
+        False,
+        description="Deprecated. Not implemented.",
+    )
+    discharge_resistive_boosting: bool = Field(
+        False,
+        description="If True, enables boosting by resistive heaters instead of heat pumps. "
+        "`prepare_sector_network` then adds the links `<node> urban central water pits resistive booster` "
+        "and `<node> urban central water pits resistive heater stand-alone` and reroutes heat generation "
+        "from resistive heaters accordingly. The required boosting energy is computed in `build_ptes_operations` "
+        "as `ptes_boost_per_discharge_profiles_base_s<nodes>_<year>.nc`.",
+    )
+    top_temperature: float | Literal["forward"] = Field(
+        90,
+        description="PTES top layer temperature in °C. When `top_temperature` falls below the nodal forward "
+        "temperature, additional heating (boosting) is needed during discharge following a similar logic as "
+        "for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature "
+        "profile dynamically.",
+    )
+    bottom_temperature: float | Literal["return"] = Field(
+        35,
+        description="PTES bottom layer temperature in °C. Can be set to 'return' to follow the return "
+        "temperature profile dynamically.",
+    )
+    design_top_temperature: float = Field(
+        90,
+        gt=0,
+        description="Design top temperature in °C for capacity calculation.",
+    )
+    design_bottom_temperature: float = Field(
+        35,
+        gt=0,
+        description="Design bottom temperature in °C for capacity calculation.",
+    )
+
+    @field_validator("top_temperature")
+    @classmethod
+    def validate_top_temperature(cls, v):
+        if isinstance(v, (int, float)) and v <= 0:
+            raise ValueError("top_temperature must be > 0 when specified as a number")
+        return v
+
+    @field_validator("bottom_temperature")
+    @classmethod
+    def validate_bottom_temperature(cls, v):
+        if isinstance(v, (int, float)) and v <= 0:
+            raise ValueError(
+                "bottom_temperature must be > 0 when specified as a number"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def validate_temperature_order(self):
+        top = self.top_temperature
+        bottom = self.bottom_temperature
+        if isinstance(top, (int, float)) and isinstance(bottom, (int, float)):
+            if top < bottom:
+                raise ValueError(
+                    f"top_temperature ({top}) must be >= bottom_temperature ({bottom})"
+                )
+        if self.design_top_temperature < self.design_bottom_temperature:
+            raise ValueError(
+                f"design_top_temperature ({self.design_top_temperature}) must be >= "
+                f"design_bottom_temperature ({self.design_bottom_temperature})"
+            )
+        return self
 
 
 class _DistrictHeatingConfig(ConfigModel):
@@ -59,14 +179,9 @@ class _DistrictHeatingConfig(ConfigModel):
         },
         description="Supply temperature approximation settings.",
     )
-    ptes: dict[str, Any] = Field(
-        default_factory=lambda: {
-            "dynamic_capacity": False,
-            "supplemental_heating": {"enable": False, "booster_heat_pump": False},
-            "max_top_temperature": 90,
-            "min_bottom_temperature": 35,
-        },
-        description="Pit thermal energy storage settings.",
+    ptes: _PtesConfig = Field(
+        default_factory=_PtesConfig,
+        description="Pit thermal energy storage (PTES) settings.",
     )
     ates: dict[str, Any] = Field(
         default_factory=lambda: {
@@ -95,27 +210,72 @@ class _DistrictHeatingConfig(ConfigModel):
         },
         description="Heat pump COP approximation settings.",
     )
-    limited_heat_sources: dict[str, Any] = Field(
-        default_factory=lambda: {
-            "geothermal": {
-                "constant_temperature_celsius": 65,
-                "ignore_missing_regions": False,
-            },
-            "river_water": {"constant_temperature_celsius": False},
-        },
-        description="Dictionary with names of limited heat sources (not air). Must be `river_water` / `geothermal` or another heat source in `Manz et al. 2024 <https://www.sciencedirect.com/science/article/pii/S0960148124001769>`_.",
-    )
-    direct_utilisation_heat_sources: list[str] = Field(
-        default_factory=lambda: ["geothermal"],
-        description="List of heat sources for direct heat utilisation in district heating. Must be in the keys of `heat_utilisation_potentials` (e.g. `geothermal`).",
-    )
-    temperature_limited_stores: list[str] = Field(
-        default_factory=lambda: ["ptes"],
-        description="List of names for stores used as limited heat sources.",
-    )
     dh_areas: dict[str, Any] = Field(
         default_factory=lambda: {"buffer": 1000, "handle_missing_countries": "fill"},
         description="District heating areas settings.",
+    )
+    fallback_ptx_heat_losses: float = Field(
+        0.05,
+        description="Default heat loss fraction for PtX processes when waste heat recovery is enabled but no specific loss value is provided.",
+    )
+    ignore_missing_geothermal_data: bool = Field(
+        False,
+        description="If true, missing geothermal data for non-EU countries will be ignored. If false, an error will be raised if countries with missing data are modelled while geothermal heat is included as a heat source.",
+    )
+
+    heat_source_temperatures: dict[str, float] = Field(
+        default_factory=lambda: {
+            "geothermal": 65,
+            "electrolysis_waste": 70,
+            "fuel_cell_waste": 70,
+            "fischer_tropsch_waste": 200,
+            "haber_bosch_waste": 200,
+            "sabatier_waste": 200,
+            "methanolisation_waste": 200,
+        },
+        description=(
+            "Assumed constant temperatures (°C) of heat sources used for "
+            "district heating. When a heat source is included in `heat_sources`, "
+            "its temperature determines whether heat can be used directly "
+            "(T_source > T_forward), the ratio for preheating "
+            "(T_return < T_source < T_forward), or boosting via heat pumps."
+        ),
+    )
+
+    @field_validator("heat_source_temperatures")
+    @classmethod
+    def validate_heat_source_temperature_keys(
+        cls, v: dict[str, float]
+    ) -> dict[str, float]:
+        """Ensure all keys are valid heat sources with config-defined temperatures."""
+        valid_keys = {s.value for s in HeatSource if s.temperature_from_config}
+        invalid = set(v.keys()) - valid_keys
+        if invalid:
+            raise ValueError(
+                f"Invalid heat_source_temperatures key(s): {sorted(invalid)}. "
+                f"Valid keys: {sorted(valid_keys)}"
+            )
+        return v
+
+    fallback_ptx_heat_losses: float = Field(
+        0.05,
+        description=(
+            "Assumed fractional heat loss for PtX processes whose technology data "
+            "does not provide an explicit heat output efficiency (currently Sabatier "
+            "and H2 Fuel Cell). For these processes the waste heat efficiency is "
+            "calculated as ``1 - fallback_ptx_heat_losses - main_efficiency`` with `main_efficiency` referring to the `efficiency` field in the cost data. "
+            "See ``HeatSource.get_waste_heat_efficiency()`` in "
+            "``scripts/definitions/heat_source.py`` and ``add_waste_heat()`` in "
+            "``scripts/prepare_sector_network.py``."
+        ),
+    )
+    subnodes: _SubnodesConfig = Field(
+        default_factory=_SubnodesConfig,
+        description="Configuration options for explicit representation of largest district heating systems as subnodes.",
+    )
+    subnodes: _SubnodesConfig = Field(
+        default_factory=_SubnodesConfig,
+        description="Configuration options for explicit representation of largest district heating systems as subnodes.",
     )
 
 
@@ -382,14 +542,52 @@ class SectorConfig(BaseModel):
         description="District heating configuration.",
     )
 
-    heat_pump_sources: dict[str, list[str]] = Field(
+    heat_sources: dict[HeatSystemType, list[HeatSource]] = Field(
         default_factory=lambda: {
-            "urban central": ["air"],
-            "urban decentral": ["air"],
-            "rural": ["air", "ground"],
+            HeatSystemType.URBAN_CENTRAL: [
+                HeatSource.AIR,
+                HeatSource.PTES,
+                HeatSource.GEOTHERMAL,
+                HeatSource.ELECTROLYSIS_WASTE,
+                HeatSource.FUEL_CELL_WASTE,
+                HeatSource.FISCHER_TROPSCH_WASTE,
+                HeatSource.HABER_BOSCH_WASTE,
+                HeatSource.SABATIER_WASTE,
+                HeatSource.METHANOLISATION_WASTE,
+            ],
+            HeatSystemType.URBAN_DECENTRAL: [HeatSource.AIR],
+            HeatSystemType.RURAL: [HeatSource.AIR, HeatSource.GROUND],
         },
-        description="Heat pump sources by area.",
+        description=(
+            "Heat sources by heat system type. Allowed: "
+            "urban central: all except 'ground'; "
+            "urban decentral: ['air']; "
+            "rural: ['air', 'ground']."
+        ),
     )
+
+    @field_validator("heat_sources")
+    @classmethod
+    def validate_heat_sources_for_system_type(
+        cls, v: dict[HeatSystemType, list[HeatSource]]
+    ) -> dict[HeatSystemType, list[HeatSource]]:
+        """Validate that heat sources are appropriate for each system type."""
+        allowed_heat_sources = {
+            HeatSystemType.URBAN_CENTRAL: [
+                s for s in HeatSource if s != HeatSource.GROUND
+            ],
+            HeatSystemType.URBAN_DECENTRAL: [HeatSource.AIR],
+            HeatSystemType.RURAL: [HeatSource.AIR, HeatSource.GROUND],
+        }
+        for system_type, sources in v.items():
+            allowed = allowed_heat_sources[system_type]
+            invalid = [s for s in sources if s not in allowed]
+            if invalid:
+                raise ValueError(
+                    f"Heat source(s) {[s.value for s in invalid]} not allowed for "
+                    f"'{system_type.value}'. Allowed: {[s.value for s in allowed]}."
+                )
+        return v
 
     residential_heat: _ResidentialHeatConfig = Field(
         default_factory=_ResidentialHeatConfig,
@@ -618,9 +816,9 @@ class SectorConfig(BaseModel):
         default_factory=_RetrofittingConfig, description="Retrofitting configuration."
     )
 
-    tes: bool = Field(
+    ttes: bool = Field(
         True,
-        description="Add option for storing thermal energy in large water pits associated with district heating systems and individual thermal energy storage (TES).",
+        description="Enable tank thermal energy storage (TTES) in district heating and individual heating. ",
     )
     boilers: bool = Field(
         True, description="Add option for transforming gas into heat using gas boilers."
@@ -910,3 +1108,51 @@ class SectorConfig(BaseModel):
     imports: _ImportsConfig = Field(
         default_factory=_ImportsConfig, description="Imports configuration."
     )
+
+    @model_validator(mode="after")
+    def validate_waste_heat_utilisation_factors(self):
+        """
+        Ensure every PtX waste heat source in ``heat_sources.urban central``
+        has a non-zero utilisation factor (e.g. ``use_fischer_tropsch_waste_heat``).
+
+        Without this, ``prepare_sector_network.add_waste_heat()`` would wire a zero-efficiency link, so the source would be listed but never contribute heat.
+        """
+        urban_central_sources = self.heat_sources.get(HeatSystemType.URBAN_CENTRAL, [])
+        for source in urban_central_sources:
+            option_key = source.waste_heat_option_key
+            if option_key is None:
+                continue
+            utilisation = getattr(self, option_key, 0)
+            if not utilisation:
+                raise ValueError(
+                    f"'{source.value}' is in heat_sources.urban central but "
+                    f"'{option_key}' is 0 or unset. Either set it to a value "
+                    f"in (0, 1] or remove '{source.value}' from heat_sources."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def validate_heat_source_temperatures(self):
+        """
+        Ensure every config-temperature heat source (geothermal, PtX waste)
+        has an entry in ``district_heating.heat_source_temperatures``.
+
+        These temperatures are needed by ``build_cop_profiles`` and
+        ``build_heat_source_utilisation_profiles`` to compute COPs and
+        direct-use / preheating / boosting ratios.
+        """
+        configured_temps = self.district_heating.heat_source_temperatures
+        for system_type, sources in self.heat_sources.items():
+            for source in sources:
+                if (
+                    source.temperature_from_config
+                    and source.value not in configured_temps
+                ):
+                    raise ValueError(
+                        f"'{source.value}' is in heat_sources.{system_type.value} "
+                        f"but has no entry in district_heating."
+                        f"heat_source_temperatures. Add "
+                        f"'heat_source_temperatures.{source.value}: <°C>'. "
+                        f"Configured: {list(configured_temps.keys())}"
+                    )
+        return self
