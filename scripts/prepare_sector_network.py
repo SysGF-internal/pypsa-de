@@ -3589,6 +3589,9 @@ def add_heat(
                 capital_cost = heat_source.get_capital_cost(
                     costs, overdim_factor, heat_system
                 )
+                overnight_cost = heat_source.get_overnight_cost(
+                    costs, overdim_factor, heat_system
+                )
                 lifetime = heat_source.get_lifetime(costs, heat_system)
 
                 n.add(
@@ -3600,7 +3603,7 @@ def add_heat(
                     p_nom_extendable=True,
                     p_nom_max=p_nom_max,
                     capital_cost=capital_cost,
-                    onight_cost=onight_cost,
+                    onight_cost=overnight_cost,
                     lifetime=lifetime,
                     p_max_pu=p_max_pu,
                 )
@@ -5487,7 +5490,7 @@ def add_industry(
             spatial.coal.industry,
             bus=spatial.coal.industry,
             carrier="coal for industry",
-            p_set=p_set,
+            p_set=p_set[spatial.coal.industry],
         )
 
         n.add(
