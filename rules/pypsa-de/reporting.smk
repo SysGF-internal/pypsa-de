@@ -232,3 +232,105 @@ rule ariadne_all:
         price_carbon="results/"
         + config["run"]["prefix"]
         + "/scenario_comparison/Price-Carbon.png",
+
+SOLVED_NETWORKS = expand(
+    RESULTS
+    + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
+    run=config_provider("run", "name"),
+    **config["scenario"],
+    allow_missing=True,
+)
+
+# Base directory for cross-scenario sysgf outputs (at the run-prefix level,
+# not under any per-scenario subdirectory)
+_SYSGF_DIR = "results/" + config["run"]["prefix"] + "/"
+
+
+rule plot_dh_systems:
+    wildcard_constraints:
+        scenario1="[^/]+",
+        scenario2="[^/]+",
+    params:
+        run=config["run"]["prefix"],
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        plotting=config_provider("sysgf", "plotting"),
+    input:
+        networks=SOLVED_NETWORKS,
+    output:
+        pdf=_SYSGF_DIR + "sysgf/dh_systems_{scenario1}_vs_{scenario2}.pdf",
+    resources:
+        mem_mb=8000,
+    log:
+        _SYSGF_DIR + "logs/plot_dh_systems_{scenario1}_vs_{scenario2}.log",
+    script:
+        scripts("pypsa-de/plot_dh_systems.py")
+
+
+rule plot_system_cost_comparison:
+    params:
+        run=config["run"]["prefix"],
+        scenarios=config["run"]["name"],
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+        plotting=config_provider("sysgf", "plotting"),
+    input:
+        networks=SOLVED_NETWORKS,
+    output:
+        pdf=_SYSGF_DIR + "sysgf/system_cost_comparison.pdf",
+    resources:
+        mem_mb=8000,
+    log:
+        _SYSGF_DIR + "logs/plot_system_cost_comparison.log",
+    script:
+        scripts("pypsa-de/plot_system_cost_comparison.py")
+
+
+rule get_sysgf_summary:
+    params:
+        run=config["run"]["prefix"],
+        scenarios=config["run"]["name"],
+        planning_horizons=config_provider("scenario", "planning_horizons"),
+    input:
+        networks=SOLVED_NETWORKS,
+    output:
+        sysgf_summary=_SYSGF_DIR + "sysgf/summary.csv",
+    resources:
+        mem_mb=16000,
+    log:
+        _SYSGF_DIR + "logs/get_sysgf_summary.log",
+    script:
+        scripts("pypsa-de/get_sysgf_summary.py")
+
+
+rule plot_temporal_heat_balance:
+    params:
+        plotting=config_provider("sysgf", "plotting"),
+    input:
+        network=RESULTS
+        + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
+        forward_temperature=resources(
+            "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
+        ),
+    output:
+        pdf=RESULTS
+        + "sysgf/temporal_heat_balance_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.pdf",
+    resources:
+        mem_mb=8000,
+    log:
+        RESULTS
+        + "logs/plot_temporal_heat_balance/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.log",
+    script:
+        scripts("pypsa-de/plot_temporal_heat_balance.py")
+
+
+# rule sysgf_all:
+#     input:
+#         # rules.plot_sysgf_violines.output.png,
+#         expand(
+#             rules.plot_dh_systems.output.pdf,
+#             zip,
+#             scenario1=[p[0] for p in config["sysgf"]["plotting"]["scenario_comparisons"]],
+#             scenario2=[p[1] for p in config["sysgf"]["plotting"]["scenario_comparisons"]],
+#         ),
+#         rules.get_sysgf_summary.output.sysgf_summary,
+#         # rules.plot_system_cost_comparison.output.pdf,
+#         # rules.plot_temporal_heat_balance.output[0],
