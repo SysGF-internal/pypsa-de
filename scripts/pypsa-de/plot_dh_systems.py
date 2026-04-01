@@ -27,6 +27,12 @@ import pandas as pd
 import pypsa
 
 from scripts._helpers import configure_logging, mock_snakemake
+from scripts.sysgf_plot_helpers import (
+    apply_carrier_groups,
+    clean_label,
+    get_colors,
+    process_networks,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,30 +158,6 @@ class HandlerSquare(HandlerPatch):
 # ---------------------------------------------------------------------------
 # Data extraction helpers
 # ---------------------------------------------------------------------------
-
-
-def apply_carrier_groups(df, carrier_groups):
-    """Merge DataFrame columns according to *carrier_groups* mapping.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Columns are carrier names.
-    carrier_groups : dict[str, list[str]] or None
-        Maps group name → list of carrier names to merge.  Applied in
-        definition order; a carrier already consumed by an earlier group is
-        not re-claimed.
-
-    Returns
-    -------
-    pd.DataFrame with grouped columns replacing their constituents.
-    """
-    for group_name, carrier_list in (carrier_groups or {}).items():
-        matching = [c for c in df.columns if c in carrier_list]
-        if matching:
-            df[group_name] = df[matching].sum(axis=1)
-            df = df.drop(columns=matching)
-    return df
 
 
 def calc_dh_price_range_subnodes(n, subnodes_only=True):
@@ -410,20 +392,7 @@ def format_scenario_title(scenario):
 
 def _clean_label(label):
     """Convert a carrier name to a human-readable legend label."""
-    label = re.sub("urban central heat$", "heat for residential and services", label)
-    label = label.replace("urban central ", "")
-    label = label.replace("water pits", "PTES")
-    label = label.replace("water tanks", "TTES")
-    label = label.replace(" charger", "").replace(" discharger", "")
-    label = label.replace("A/WSHP", "Air and water sourced heat pumps")
-
-    words = label.split()
-    if words:
-        first = words[0]
-        if first.upper() not in {"CHP", "PTES", "TTES", "H2"}:
-            words[0] = first.capitalize()
-        label = " ".join(words)
-    return label
+    return clean_label(label)
 
 
 # ---------------------------------------------------------------------------
@@ -431,60 +400,7 @@ def _clean_label(label):
 # ---------------------------------------------------------------------------
 
 
-def get_colors(networks, override_colors=None):
-    """Extract carrier colors from the first network, applying any overrides.
-
-    Parameters
-    ----------
-    networks : dict[str, pypsa.Network]
-    override_colors : dict, optional
-
-    Returns
-    -------
-    dict[str, str]
-    """
-    if override_colors is None:
-        override_colors = {}
-    first_scenario = next(iter(networks))
-    first_network = networks[first_scenario]
-    colors = first_network.carriers.color
-    extended_index = colors.index.union(override_colors.keys())
-    colors = colors.reindex(extended_index).fillna("black").to_dict()
-    colors.update(override_colors)
-    return colors
-
-
-def process_networks(network_files, run_name, scenarios):
-    """Load one solved network per scenario.
-
-    Parameters
-    ----------
-    network_files : list[str]
-        All candidate network file paths from snakemake.input.networks.
-    run_name : str
-        Run prefix used to identify the correct network file.
-    scenarios : list[str]
-
-    Returns
-    -------
-    dict[str, pypsa.Network]
-    """
-    networks = {}
-    logger.info(f"Loading networks for run '{run_name}', scenarios: {scenarios}")
-
-    for scenario in scenarios:
-        matches = [f for f in network_files if f"{run_name}/{scenario}" in f]
-        if len(matches) > 1:
-            raise RuntimeError(
-                f"Multiple network files found for scenario '{scenario}': {matches}"
-            )
-        if len(matches) == 0:
-            raise RuntimeError(
-                f"No network file found for scenario '{scenario}' under run '{run_name}'"
-            )
-        networks[scenario] = pypsa.Network(matches[0])
-
-    return networks
+# get_colors and process_networks are imported from sysgf_plot_helpers
 
 
 # ---------------------------------------------------------------------------

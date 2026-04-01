@@ -33,6 +33,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts._helpers import configure_logging, mock_snakemake
+from scripts.sysgf_plot_helpers import apply_carrier_groups, clean_label
 
 logger = logging.getLogger(__name__)
 
@@ -49,14 +50,7 @@ DEFAULT_EXAMPLE_WEEKS = {
 # ---------------------------------------------------------------------------
 
 
-def apply_carrier_groups(df, carrier_groups):
-    """Merge DataFrame columns according to *carrier_groups* mapping."""
-    for group_name, carrier_list in (carrier_groups or {}).items():
-        matching = [c for c in df.columns if c in carrier_list]
-        if matching:
-            df[group_name] = df[matching].sum(axis=1)
-            df = df.drop(columns=matching)
-    return df
+# apply_carrier_groups imported from sysgf_plot_helpers
 
 
 def get_temporal_dh_balance(n, carrier_groups=None, subnodes_only=True):
@@ -241,12 +235,7 @@ def build_legend_handles(carriers, colors):
 
 def _clean_label(label):
     """Shorten carrier label for display."""
-    s = str(label)
-    s = s.replace("urban central ", "").replace(" CC", "")
-    s = s.replace("water pits", "PTES").replace("water tanks", "TTES")
-    if s and s[0].islower():
-        s = s[0].upper() + s[1:]
-    return s
+    return clean_label(label)
 
 
 # ---------------------------------------------------------------------------
@@ -325,13 +314,13 @@ def main(snakemake):
     lc_w = plot_dh_balance_week(ax_w, bal_winter, price_winter, temp_winter, colors, norm,
                                 ylabel=True, price_label=False)
     ax_w.set_ylim(*ylim)
-    ax_w.set_title(f"Jan {example_weeks['winter']['start'][-2:]}\u2013{example_weeks['winter']['end'][-2:]}", fontsize=12)
+    ax_w.set_title(f"{winter_start:%b %d}\u2013{winter_end:%b %d}", fontsize=12)
 
     logger.info("Plotting summer week")
     lc_s = plot_dh_balance_week(ax_s, bal_summer, price_summer, temp_summer, colors, norm,
                                 ylabel=False, price_label=True)
     ax_s.set_ylim(*ylim)
-    ax_s.set_title(f"Jul {example_weeks['summer']['start'][-2:]}\u2013{example_weeks['summer']['end'][-2:]}", fontsize=12)
+    ax_s.set_title(f"{summer_start:%b %d}\u2013{summer_end:%b %d}", fontsize=12)
 
     # Legend — collect unique carriers across both panels
     all_carriers = list(dict.fromkeys(

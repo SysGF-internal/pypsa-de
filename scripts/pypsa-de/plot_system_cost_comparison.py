@@ -35,6 +35,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts._helpers import configure_logging, mock_snakemake
+from scripts.sysgf_plot_helpers import (
+    clean_label,
+    get_colors as _get_colors_base,
+    process_networks,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,18 +72,7 @@ TECH_GROUPINGS = {
 # ---------------------------------------------------------------------------
 
 
-def process_networks(network_files, run_name, scenarios):
-    """Load one solved network per scenario from snakemake input paths."""
-    networks = {}
-    for scenario in scenarios:
-        matches = [f for f in network_files if f"{run_name}/{scenario}" in f]
-        if len(matches) != 1:
-            raise RuntimeError(
-                f"Expected exactly 1 network file for '{scenario}', "
-                f"found {len(matches)}: {matches}"
-            )
-        networks[scenario] = pypsa.Network(matches[0])
-    return networks
+# process_networks imported from sysgf_plot_helpers
 
 
 # ---------------------------------------------------------------------------
@@ -183,10 +177,11 @@ def calc_average_dh_price(n):
         "low-temperature heat for industry", "urban central heat"
     )
     loads = loads.T.groupby(level=0).sum().T
-    prices = n.buses_t.marginal_price.filter(regex=r"DE0.*urban central heat")
+    prices = n.buses_t.marginal_price.filter(regex=r"DE.*urban central heat")
     if prices.empty or loads.sum().sum() == 0:
         return 0.0
-    return loads.mul(prices).sum().sum() / loads.sum().sum()
+    w = n.snapshot_weightings.generators
+    return loads.mul(prices).mul(w, axis=0).sum().sum() / loads.mul(w, axis=0).sum().sum()
 
 
 # ---------------------------------------------------------------------------
@@ -226,28 +221,7 @@ def aggregate_small_techs(costs_df, savings_df, threshold):
 
 def format_label(label):
     """Human-readable legend label."""
-    if pd.isna(label) or label == "":
-        return label
-    replacements = {
-        "urban central ": "",
-        "CC": "",
-        "ptes": "PTES",
-        "water tanks": "TTES",
-        "water pits": "PTES",
-        "river_water": "river water",
-    }
-    s = str(label)
-    for old, new in replacements.items():
-        s = s.replace(old, new)
-    s = " ".join(s.split())
-    acronyms = {"PV", "PTES", "TTES", "AC", "DC", "EU"}
-    words = s.split()
-    if words:
-        if words[0].upper() in acronyms:
-            words[0] = words[0].upper()
-        elif words[0] == words[0].lower():
-            words[0] = words[0].capitalize()
-    return " ".join(words)
+    return clean_label(label)
 
 
 # ---------------------------------------------------------------------------
@@ -267,10 +241,7 @@ DEFAULT_COLORS = {
 
 def get_colors(networks, override_colors=None):
     """Extract carrier colours from the first network, with overrides."""
-    first = next(iter(networks.values()))
-    carrier_colors = first.carriers.color.dropna()
-    carrier_colors = carrier_colors[carrier_colors != ""]
-    colors = carrier_colors.to_dict()
+    colors = _get_colors_base(networks, override_colors)
     colors.update(DEFAULT_COLORS)
     if override_colors:
         colors.update(override_colors)

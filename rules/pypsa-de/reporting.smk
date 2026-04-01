@@ -322,6 +322,24 @@ rule plot_temporal_heat_balance:
         scripts("pypsa-de/plot_temporal_heat_balance.py")
 
 
+rule plot_dh_balance_price_ventiles:
+    params:
+        plotting=config_provider("sysgf", "plotting"),
+    input:
+        network=RESULTS
+        + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
+    output:
+        pdf=RESULTS
+        + "sysgf/dh_balance_price_ventiles_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.pdf",
+    resources:
+        mem_mb=8000,
+    log:
+        RESULTS
+        + "logs/plot_dh_balance_price_ventiles/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.log",
+    script:
+        scripts("pypsa-de/plot_dh_balance_price_ventiles.py")
+
+
 # rule sysgf_all:
 #     input:
 #         # rules.plot_sysgf_violines.output.png,
