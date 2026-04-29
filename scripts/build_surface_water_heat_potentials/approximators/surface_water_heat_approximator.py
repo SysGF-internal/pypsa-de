@@ -196,7 +196,7 @@ class SurfaceWaterHeatApproximator(ABC):
         xr.DataArray
             Volume flow data clipped to region
         """
-        return self.volume_flow.rio.clip(self.region.geometry, drop=False)
+        return self.volume_flow.rio.clip(self.region.geometry, drop=True)
 
     @cached_property
     def _water_temperature_in_region(self) -> xr.DataArray:
@@ -208,7 +208,7 @@ class SurfaceWaterHeatApproximator(ABC):
         xr.DataArray
             Water temperature data clipped to region
         """
-        return self.water_temperature.rio.clip(self.region.geometry, drop=False)
+        return self.water_temperature.rio.clip(self.region.geometry, drop=True)
 
     @cached_property
     def _data_resolution(self) -> float:

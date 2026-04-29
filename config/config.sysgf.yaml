@@ -95,3 +95,58 @@ solving:
     limits_volume_max: {}
     limits_volume_min: {}
     limits_power_max: {}
+
+pypsa-de:
+  # Reference scenario for sysgf cross-scenario plots (run scenario name, not Ariadne name)
+  sysgf_reference_scenario: Baseline
+  sensitivity_runs: []
+  plotting:
+    # Pairs of (scenario, no_ptes_reference) used in cost-impact and summary plots
+    scenario_tuples:
+      - [Baseline, No_PTES]
+    override_tech_colors: {}
+    drop_losses: true
+    subnodes_only: true
+    aggregate_threshold_pct: 0.025
+    n_price_ventiles: 20
+    # Explicit carrier-to-group mapping. Carriers listed under a group name are
+    # summed into that group in the order defined. Carriers not listed are kept as-is.
+    carrier_groups:
+      CHP:
+        - urban central gas CHP
+        - urban central solid biomass CHP
+        - urban central lignite CHP
+        - urban central coal CHP
+        - urban central oil CHP
+        - urban central H2 CHP
+        - waste CHP
+      Heat Pumps:
+        - urban central air heat pump
+        - urban central river_water heat pump
+        - urban central sea_water heat pump
+        - urban central ptes heat pump
+        - urban central electrolysis excess heat pump
+        - urban central geothermal heat pump
+      geothermal heat:
+        - geothermal heat utilisation
+        - Geothermal heat preheater
+      District Heating Demand:
+        - low-temperature heat for industry
+        - urban central heat
+      PTES charge:
+        - urban central ptes heat utilisation
+        - urban central ptes heat
+        - urban central water pits charger
+      PTES discharge:
+        - urban central water pits discharger
+      TTES charge:
+        - urban central water tanks charger
+      TTES discharge:
+        - urban central water tanks discharger
+      PtX excess heat:
+        - urban central H2 electrolysis excess heat
+        - urban central fuel cell excess heat
+        - urban central fischer-tropsch excess heat
+        - urban central haber-bosch excess heat
+        - urban central sabatier excess heat
+        - urban central methanolisation excess heat

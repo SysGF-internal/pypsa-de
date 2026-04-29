@@ -8,6 +8,24 @@ from enum import Enum
 logger = logging.getLogger(__name__)
 
 
+class Spatial(Enum):
+    """
+    Spatial scope at which a heat source is instantiated in the network.
+
+    Attributes
+    ----------
+    PARENT_NODE : str
+        Heat source is only added at parent cluster nodes, not subnodes.
+        Used for sources intrinsically tied to parent-level processes
+        (e.g., PTX waste heat from processes defined at the cluster level).
+    SUB_NODE : str
+        Heat source is added at all nodes, including district heating subnodes.
+    """
+
+    PARENT_NODE = "parent_node"
+    SUB_NODE = "sub_node"
+
+
 class HeatSourceType(Enum):
     """
     Categorization of heat sources by their fundamental characteristics.
@@ -99,7 +117,7 @@ class HeatSource(Enum):
             The string representation of the heat source.
         """
         return self.value
-
+    
     @property
     def source_type(self) -> HeatSourceType:
         """
@@ -122,6 +140,24 @@ class HeatSource(Enum):
             return HeatSourceType.STORAGE
         else:
             return HeatSourceType.PROCESS_WASTE
+
+    @property
+    def spatial(self) -> Spatial:
+        """
+        Spatial scope at which this heat source is instantiated in the network.
+
+        PROCESS_WASTE sources are tied to PTX processes defined at parent cluster
+        level, so their heat infrastructure must only be built at parent nodes.
+        All other sources can exist at subnode level.
+
+        Returns
+        -------
+        Spatial
+            PARENT_NODE for PTX waste heat sources, SUB_NODE for all others.
+        """
+        if self.source_type == HeatSourceType.PROCESS_WASTE:
+            return Spatial.PARENT_NODE
+        return Spatial.SUB_NODE
 
     @property
     def temperature_from_config(self) -> bool:
@@ -356,6 +392,46 @@ class HeatSource(Enum):
                 costs.at[
                     heat_system.heat_source_costs_name(self),
                     "capital_cost",
+                ]
+                * overdim_factor
+            )
+        else:
+            return 0.0
+
+    def get_overnight_cost(self, costs, overdim_factor: float, heat_system) -> float:
+        """
+        Returns the capital cost for the heat source generator.
+
+        For direct utilisation heat sources (geothermal), retrieves cost from technology-data.
+        For other limited sources (like river_water without direct utilisation), returns 0.0.
+        For inexhaustible sources (air, ground, sea water), this method shouldn't be called.
+
+        Parameters
+        ----------
+        costs : pd.DataFrame
+            DataFrame containing cost information for different technologies.
+        overdim_factor : float
+            Factor to overdimension the heat generator.
+        heat_system : HeatSystem
+            The heat system for which to get the capital cost.
+
+        Returns
+        -------
+        float
+            The capital cost for the heat source generator.
+
+        Notes
+        -----
+        - For direct utilisation heat sources (geothermal), gets cost from technology-data.
+        - For other limited sources (like river_water), returns 0.0.
+        - For inexhaustible sources, this method shouldn't be called.
+        """
+
+        if self in [HeatSource.GEOTHERMAL]:
+            return (
+                costs.at[
+                    heat_system.heat_source_costs_name(self),
+                    "investment",
                 ]
                 * overdim_factor
             )

@@ -1736,11 +1736,10 @@ if (LAKE_DATA_DATASET := dataset_version("lake_data"))["source"] in [
         output:
             zip_file=f"{LAKE_DATA_DATASET['folder']}/HydroLAKES_polys_v10.gdb.zip",
             lake_data=directory(
-                f"{LAKE_DATA_DATASET['folder']}/HydroLAKES_polys_v10.gdb/HydroLAKES_polys_v10.gdb"
+                f"{LAKE_DATA_DATASET['folder']}/HydroLAKES_polys_v10.gdb/HydroLAKES_polys_v10.gdb/HydroLAKES_polys_v10.gdb"
             ),
         run:
             copy2(input["zip_file"], output["zip_file"])
             unpack_archive(
                 output["zip_file"],
-                output["lake_data"],
             )

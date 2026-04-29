@@ -43,7 +43,7 @@ from scripts.build_energy_totals import (
 )
 from scripts.build_transport_demand import transport_degree_factor
 from scripts.definitions.heat_sector import HeatSector
-from scripts.definitions.heat_source import HeatSource, HeatSourceType
+from scripts.definitions.heat_source import HeatSource, HeatSourceType, Spatial
 from scripts.definitions.heat_system import HeatSystem
 from scripts.prepare_network import maybe_adjust_costs_and_potentials
 
@@ -3121,11 +3121,16 @@ def add_heat(
                     district_heat_info.loc[heat_nodes, "parent_node"].values,
                     index=heat_nodes,
                 )
+                parent_heat_nodes = heat_nodes[
+                    parent_of_subnode.values == heat_nodes.values
+                ]
             else:
                 parent_of_subnode = pd.Series(heat_nodes, index=heat_nodes)
+                parent_heat_nodes = heat_nodes
         else:
             heat_nodes = pop_layout.index
             parent_of_subnode = pd.Series(heat_nodes, index=heat_nodes)
+            parent_heat_nodes = heat_nodes
 
         n.add("Carrier", f"{heat_system} heat")
 
@@ -3470,13 +3475,21 @@ def add_heat(
             # Convert string to HeatSource enum
             heat_source = HeatSource(heat_source)
 
+            # PTX waste heat sources are tied to processes at parent node level;
+            # all other sources are built at every heat node including subnodes.
+            this_heat_source_nodes = (
+                parent_heat_nodes
+                if heat_source.spatial == Spatial.PARENT_NODE
+                else heat_nodes
+            )
+
             costs_name_heat_pump = heat_system.heat_pump_costs_name(heat_source)
 
             cop_heat_pump = (
                 cop.sel(
                     heat_system=heat_system.system_type.value,
                     heat_source=heat_source.value,
-                    name=heat_nodes,
+                    name=this_heat_source_nodes,
                 )
                 .transpose("time", "name")
                 .to_pandas()
@@ -3490,8 +3503,8 @@ def add_heat(
                 n.add("Carrier", heat_carrier)
                 n.add(
                     "Bus",
-                    heat_source.resource_bus(heat_nodes, heat_system),
-                    location=heat_nodes,
+                    heat_source.resource_bus(this_heat_source_nodes, heat_system),
+                    location=this_heat_source_nodes,
                     carrier=heat_carrier,
                 )
 
@@ -3503,10 +3516,10 @@ def add_heat(
                     n.add("Carrier", resource_vent_carrier)
                     n.add(
                         "Generator",
-                        heat_source.resource_bus(heat_nodes, heat_system),
+                        heat_source.resource_bus(this_heat_source_nodes, heat_system),
                         suffix=" vent",
-                        bus=heat_source.resource_bus(heat_nodes, heat_system),
-                        location=heat_nodes,
+                        bus=heat_source.resource_bus(this_heat_source_nodes, heat_system),
+                        location=this_heat_source_nodes,
                         carrier=resource_vent_carrier,
                         p_nom_extendable=True,
                         p_max_pu=0,
@@ -3516,7 +3529,7 @@ def add_heat(
 
                 preheater_utilisation_profile = (
                     heat_source_preheater_utilisation_profile.sel(
-                        heat_source=heat_source.value, name=heat_nodes
+                        heat_source=heat_source.value, name=this_heat_source_nodes
                     )
                     .transpose("time", "name")
                     .to_pandas()
@@ -3524,25 +3537,25 @@ def add_heat(
 
                 n.add(
                     "Bus",
-                    heat_source.preheater_input_bus(heat_nodes, heat_system),
-                    location=heat_nodes,
+                    heat_source.preheater_input_bus(this_heat_source_nodes, heat_system),
+                    location=this_heat_source_nodes,
                     carrier=heat_source.preheater_input_carrier(heat_system),
                 )
 
                 n.add(
                     "Bus",
-                    heat_source.get_heat_pump_input_bus(heat_nodes, heat_system),
-                    location=heat_nodes,
+                    heat_source.get_heat_pump_input_bus(this_heat_source_nodes, heat_system),
+                    location=this_heat_source_nodes,
                     carrier=heat_source.heat_pump_input_carrier(heat_system),
                 )
 
                 n.add(
                     "Link",
-                    heat_nodes,
+                    this_heat_source_nodes,
                     suffix=f" {heat_system} {heat_source} heat preheater",
-                    bus0=heat_source.preheater_input_bus(heat_nodes, heat_system),
-                    bus1=heat_nodes + f" {heat_system} heat",
-                    bus2=heat_source.get_heat_pump_input_bus(heat_nodes, heat_system),
+                    bus0=heat_source.preheater_input_bus(this_heat_source_nodes, heat_system),
+                    bus1=this_heat_source_nodes + f" {heat_system} heat",
+                    bus2=heat_source.get_heat_pump_input_bus(this_heat_source_nodes, heat_system),
                     efficiency=preheater_utilisation_profile,
                     efficiency2=1 - preheater_utilisation_profile,
                     carrier=f"{heat_system} {heat_source} heat preheater",
@@ -3551,7 +3564,7 @@ def add_heat(
 
                 direct_utilisation_profile = (
                     heat_source_direct_utilisation_profile.sel(
-                        heat_source=heat_source.value, name=heat_nodes
+                        heat_source=heat_source.value, name=this_heat_source_nodes
                     )
                     .transpose("time", "name")
                     .to_pandas()
@@ -3561,11 +3574,11 @@ def add_heat(
 
                 n.add(
                     "Link",
-                    heat_nodes,
+                    this_heat_source_nodes,
                     suffix=f" {heat_system} {heat_source} heat utilisation",
-                    bus0=heat_source.resource_bus(heat_nodes, heat_system),
-                    bus1=heat_nodes + f" {heat_system} heat",
-                    bus2=heat_source.preheater_input_bus(heat_nodes, heat_system),
+                    bus0=heat_source.resource_bus(this_heat_source_nodes, heat_system),
+                    bus1=this_heat_source_nodes + f" {heat_system} heat",
+                    bus2=heat_source.preheater_input_bus(this_heat_source_nodes, heat_system),
                     efficiency=direct_utilisation_profile,
                     efficiency2=1 - direct_utilisation_profile,
                     carrier=f"{heat_system} {heat_source} heat utilisation",
@@ -3578,7 +3591,7 @@ def add_heat(
                     heat_source_profile_files[heat_source.value],
                     index_col=0,
                     parse_dates=True,
-                )[heat_nodes]
+                )[this_heat_source_nodes]
 
                 # p_nom_max is the maximum available capacity across all timesteps
                 p_nom_max = heat_source_power.max()
@@ -3596,9 +3609,9 @@ def add_heat(
 
                 n.add(
                     "Generator",
-                    heat_nodes,
+                    this_heat_source_nodes,
                     suffix=f" {heat_carrier}",
-                    bus=heat_source.resource_bus(heat_nodes, heat_system),
+                    bus=heat_source.resource_bus(this_heat_source_nodes, heat_system),
                     carrier=heat_carrier,
                     p_nom_extendable=True,
                     p_nom_max=p_nom_max,
@@ -3615,11 +3628,11 @@ def add_heat(
             ):
                 n.add(
                     "Link",
-                    heat_nodes,
+                    this_heat_source_nodes,
                     suffix=f" {heat_system} {heat_source} heat pump",
-                    bus0=heat_nodes + f" {heat_system} heat",
-                    bus1=parent_of_subnode.values,
-                    bus2=heat_source.get_heat_pump_input_bus(heat_nodes, heat_system),
+                    bus0=this_heat_source_nodes + f" {heat_system} heat",
+                    bus1=parent_of_subnode.loc[this_heat_source_nodes].values,
+                    bus2=heat_source.get_heat_pump_input_bus(this_heat_source_nodes, heat_system),
                     carrier=f"{heat_system} {heat_source} heat pump",
                     efficiency=1 / cop_heat_pump.clip(lower=0.001).squeeze(),
                     efficiency2=heat_source.get_heat_pump_efficiency2(cop_heat_pump),
@@ -5812,22 +5825,27 @@ def add_waste_heat(
         # Get utilisation factor from config (validated > 0 in config validator)
         utilisation = options[heat_source.waste_heat_option_key]
 
-        # Get efficiency and bus/efficiency column names
+        bus_col = f"bus{heat_source.process_output_bus_index}"
+        eff_col = f"efficiency{heat_source.process_output_bus_index}"
+        # PTX processes exist only at parent nodes, not subnodes; drop any
+        # subnode-derived names that have no corresponding link.
+        link_names = urban_central + " " + heat_source.process_carrier
+        link_names = link_names[link_names.isin(n.links.index)]
+        parent_nodes = link_names.str[: -len(f" {heat_source.process_carrier}")]
+
+        # Get efficiency using only parent nodes (Sabatier/FuelCell look up link efficiencies)
         efficiency = heat_source.get_waste_heat_efficiency(
             n=n,
             costs=costs,
-            nodes=urban_central,
+            nodes=parent_nodes,
             fallback_ptx_heat_losses=options["district_heating"][
                 "fallback_ptx_heat_losses"
             ],
         )
-        bus_col = f"bus{heat_source.process_output_bus_index}"
-        eff_col = f"efficiency{heat_source.process_output_bus_index}"
-        link_names = urban_central + " " + heat_source.process_carrier
 
         # Wire up the process link to output waste heat
         n.links.loc[link_names, bus_col] = heat_source.resource_bus(
-            urban_central, heat_system
+            parent_nodes, heat_system
         )
         n.links.loc[link_names, eff_col] = efficiency * utilisation
 
