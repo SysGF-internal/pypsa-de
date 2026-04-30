@@ -48,6 +48,15 @@ scenario:
   # - 2040
   - 2045
 
+fix_foreign_investments:
+  enable: false
+  reference_scenario: Baseline
+  nom_min: true
+  nom_max: true
+  lines_only: false
+  unfix_virtual_components: true
+  slack: 0
+
 clustering:
   temporal:
     resolution_sector: 365H
@@ -150,3 +159,4 @@ pypsa-de:
         - urban central haber-bosch excess heat
         - urban central sabatier excess heat
         - urban central methanolisation excess heat
+

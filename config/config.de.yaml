@@ -56,6 +56,15 @@ pypsa-de:
     2045: 0.49
     2050: 0.49
 
+fix_foreign_investments:
+  enable: false
+  reference_scenario: KN2045_Mix
+  nom_min: true
+  nom_max: true
+  lines_only: false
+  unfix_virtual_components: true
+  slack: 0
+
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#foresight
 foresight: myopic
 

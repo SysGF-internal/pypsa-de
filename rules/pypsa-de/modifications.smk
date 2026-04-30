@@ -64,6 +64,27 @@ def baseyear_value(wildcards):
     return config_provider("scenario", "planning_horizons", 0)(wildcards)
 
 
+def foreign_reference_network(w):
+    fix_cfg = config_provider("fix_foreign_investments")(w)
+    current_run = getattr(w, "run", None)
+    if (
+        not fix_cfg["enable"]
+        or current_run is None
+        or current_run == fix_cfg["reference_scenario"]
+    ):
+        return []
+
+    return resources(
+        "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_final.nc"
+    ).format(
+        run=fix_cfg["reference_scenario"],
+        clusters=w.clusters,
+        opts=w.opts,
+        sector_opts=w.sector_opts,
+        planning_horizons=w.planning_horizons,
+    )
+
+
 ruleorder: modify_district_heat_share > build_district_heat_share
 
 
@@ -90,6 +111,7 @@ rule modify_district_heat_share:
 
 rule modify_prenetwork:
     params:
+        fix_foreign_investments=config_provider("fix_foreign_investments"),
         efuel_export_ban=config_provider("solving", "constraints", "efuel_export_ban"),
         enable_kernnetz=config_provider("wasserstoff_kernnetz", "enable"),
         technology_occurrence=config_provider("first_technology_occurrence"),
@@ -130,6 +152,7 @@ rule modify_prenetwork:
         network=resources(
             "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_brownfield.nc"
         ),
+        reference_network=foreign_reference_network,
         wkn=lambda w: (
             resources("wasserstoff_kernnetz_base_s_{clusters}.csv")
             if config_provider("wasserstoff_kernnetz", "enable")(w)
