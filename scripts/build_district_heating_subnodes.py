@@ -147,6 +147,11 @@ def _refine_subnodes_with_census(
         )
         return subnodes
 
+    if eligible.crs is None:
+        raise ValueError("Census geometries must have a defined CRS")
+    if eligible.crs.to_epsg() != 3035:
+        eligible = eligible.to_crs(epsg=3035)
+
     eligible["geometry"] = eligible.geometry.buffer(50, cap_style="square")
     eligible = eligible[["geometry"]]
 
@@ -170,7 +175,11 @@ def _refine_subnodes_with_census(
         )
         return subnodes
 
-    refined = gpd.overlay(refined, original_shapes, how="intersection")
+    refined = gpd.overlay(
+        refined,
+        original_shapes[["geometry"]],
+        how="intersection",
+    )
     if refined.empty:
         logger.warning(
             "Processed census shapes no longer intersect ISI DH areas; keeping ISI subnode geometries"
@@ -374,11 +383,15 @@ def extend_regions_onshore(
         cluster_subnodes = subnodes_crs[subnodes_crs["cluster"] == cluster]
         subnode_union = cluster_subnodes.union_all()
 
-        if cluster in regions_extended.index:
-            original_geom = regions_extended.loc[cluster, "geometry"]
-            regions_extended.loc[cluster, "geometry"] = original_geom.difference(
-                subnode_union
+        if cluster not in regions_extended.index:
+            raise KeyError(
+                f"Parent cluster '{cluster}' missing from regions_onshore index"
             )
+
+        original_geom = regions_extended.loc[cluster, "geometry"]
+        regions_extended.loc[cluster, "geometry"] = original_geom.difference(
+            subnode_union
+        )
 
     subnode_entries = subnodes_crs[["name", "geometry"]].set_index("name")
     return pd.concat([regions_extended, subnode_entries])

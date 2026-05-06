@@ -137,19 +137,33 @@ def _filter_by_groundwater_depth(
     if eligible.empty:
         return eligible
 
-    centroids_4326 = eligible.geometry.to_crs("EPSG:4326").centroid
+    lon_bounds = groundwater["lon"].values
+    lat_bounds = groundwater["lat"].values
+    min_lon, max_lon = float(np.min(lon_bounds)), float(np.max(lon_bounds))
+    min_lat, max_lat = float(np.min(lat_bounds)), float(np.max(lat_bounds))
+
+    centroids = gpd.GeoSeries(eligible.geometry.centroid, crs=eligible.crs)
+    centroids_4326 = centroids.to_crs("EPSG:4326")
+
+    def _nearest_water_table_depth(point) -> float:
+        if not (min_lon <= point.x <= max_lon and min_lat <= point.y <= max_lat):
+            return np.nan
+
+        try:
+            return float(
+                groundwater["WTD"].sel(lon=point.x, lat=point.y, method="nearest").item()
+            )
+        except (KeyError, ValueError, IndexError):
+            return np.nan
+
     eligible = eligible.copy()
     eligible["water_table_depth"] = [
-        float(
-            groundwater["WTD"]
-            .sel(lon=p.x, lat=p.y, method="nearest")
-            .values
-        )
-        for p in centroids_4326
+        _nearest_water_table_depth(point) for point in centroids_4326
     ]
-    return eligible.loc[eligible["water_table_depth"] < max_groundwater_depth].drop(
-        columns=["water_table_depth"]
-    )
+    valid_depth = eligible["water_table_depth"].notna()
+    return eligible.loc[
+        valid_depth & (eligible["water_table_depth"] < max_groundwater_depth)
+    ].drop(columns=["water_table_depth"])
 
 
 def eligible_area_in_region(
@@ -299,7 +313,7 @@ def build_ptes_potentials(
 
     limited_regions = regions.loc[regions["name"].isin(target_names)]
     dh_regions = gpd.overlay(
-        dh_areas.to_crs(limited_regions.crs),
+        dh_areas.to_crs(limited_regions.crs)[["geometry"]],
         limited_regions,
         how="intersection",
     )
