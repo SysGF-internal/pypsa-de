@@ -212,7 +212,7 @@ def calculate_efficiency(CHP_de):
 
 
 def assign_subnode(
-    CHP_de: pd.DataFrame, subnodes: gpd.GeoDataFrame, head: int = 40
+    CHP_de: pd.DataFrame, subnodes: gpd.GeoDataFrame, n_subnodes: int = 40
 ) -> pd.DataFrame:
     """
     Assign subnodes to the CHP plants based on their location.
@@ -223,8 +223,8 @@ def assign_subnode(
         DataFrame containing CHP plant data with latitude and longitude.
     subnodes : gpd.GeoDataFrame
         GeoDataFrame containing subnode data with geometries.
-    head : Union[bool, int]
-        If int, select the largest N subnodes. If True, use all subnodes.
+    n_subnodes : int, optional
+        Number of largest subnodes to consider for assignment.
 
     Returns
     -------
@@ -236,10 +236,6 @@ def assign_subnode(
     CHP_de = gpd.GeoDataFrame(
         CHP_de, geometry=gpd.points_from_xy(CHP_de.lon, CHP_de.lat)
     )
-    # Set LAU shape column as geometry
-    # subnodes["geometry"] = gpd.GeoSeries.from_wkt(subnodes["lau_shape"])
-    # subnodes.drop("lau_shape", axis=1, inplace=True)
-
     # Set CRS to WGS84
     CHP_de.crs = 4326
     # Transform to the same CRS as the subnodes
@@ -247,16 +243,17 @@ def assign_subnode(
 
     # Select largest subnodes
     subnodes = subnodes.sort_values(by="yearly_heat_demand_MWh", ascending=False).head(
-        head
+        n_subnodes
     )
-    subnodes.index.rename("city", inplace=True)
+    subnodes = subnodes[["name", "yearly_heat_demand_MWh", "geometry"]].rename(
+        columns={"name": "subnode_name"}
+    )
 
-    # Assign subnode to CHP plants based on the nuts3 region
+    # Assign full subnode names directly so the CHP buses follow the same naming
+    # convention as the prepare_sector_network route.
     CHP_de = CHP_de.sjoin(subnodes, how="left", predicate="within")
-    # Insert leading whitespace for citynames where not nan
-    CHP_de["city"] = CHP_de["city"].apply(lambda x: " " + x if pd.notna(x) else "")
-    CHP_de["bus"] = CHP_de["bus"] + CHP_de["city"]
-    CHP_de.drop("city", axis=1, inplace=True)
+    CHP_de["bus"] = CHP_de["subnode_name"].combine_first(CHP_de["bus"])
+    CHP_de.drop(columns=["subnode_name"], inplace=True)
 
     return CHP_de
 
@@ -304,14 +301,12 @@ if __name__ == "__main__":
     CHP_de["bus"] = gpd.sjoin_nearest(gdf, regions, how="left")["name"]
 
     if snakemake.params.district_heating_subnodes["enable"]:
-        subnodes = gpd.read_file(
-            snakemake.input.district_heating_subnodes,
-            columns=["city", "yearly_heat_demand_MWh", "lau_shape"],
-        ).set_index("city")
+        subnodes = gpd.read_file(snakemake.input.district_heating_subnodes)
         CHP_de = assign_subnode(
             CHP_de,
             subnodes,
-            head=snakemake.params.district_heating_subnodes["nlargest"],
+            n_subnodes=snakemake.params.district_heating_subnodes["n_subnodes"],
         )
 
     CHP_de.to_csv(snakemake.output.german_chp, index=False)
+

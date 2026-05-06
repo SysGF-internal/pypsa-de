@@ -24,8 +24,7 @@ run:
 
 remote:
   ssh: "zecm"
-  path: "/home/users/c/cpschau/scratch/pypsa-sysgf
-"
+  path: "/home/users/c/cpschau/scratch/pypsa-sysgf"
 
 foresight: myopic
 
@@ -130,23 +129,19 @@ sector:
       relative_annual_temperature_reduction: 0.01
     subnodes:
       enable: true
-      nlargest: 40
+      n_subnodes: 40
+      countries: []
+      demand_column: Dem_GWh
+      label_column: Label
+      use_isi_data_assumptions: false
       census_areas:
-        enable: true
+        enable: false
+        data_file: ""
         min_district_heating_share: 0.01
         processing:
           min_area: [10000, 100000, 0, 1000000]
           buffer_factor: [0.01, 0.05, 0.05, 0]
           buffer_absolute: 5
-      limit_ptes_potential:
-        enable: true
-        limit_mother_nodes: true
-        limit_foreign_nodes: true
-        excluder_resolution: 10
-        osm_landcover_codes: [21, 23, 32, 33]
-        max_groundwater_depth: -10
-        min_area: 25000
-        default_capacity: 4500
     limited_heat_sources:
       geothermal:
         ignore_missing_regions: true
@@ -170,6 +165,17 @@ sector:
       bottom_temperature: 35
       design_top_temperature: 90
       design_bottom_temperature: 35
+      potential_limit:
+        enable: true
+        explicit_subnodes: true
+        remaining_regions: true
+        land_cover_codes: [21, 23, 32, 33]
+        excluder_resolution: 10
+        min_area: 10000
+        default_capacity_mwh: 4500
+        natura: true
+        groundwater_depth: true
+        max_groundwater_depth: -10
     ates:
       enable: false
     dh_area_buffer: 5000

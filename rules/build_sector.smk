@@ -452,6 +452,72 @@ rule build_ates_potentials:
         scripts("build_ates_potentials.py")
 
 
+rule build_ptes_potentials:
+    message:
+        "Building pit thermal energy storage (PTES) potentials for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
+    params:
+        potential_limit=config_provider(
+            "sector",
+            "district_heating",
+            "ptes",
+            "potential_limit",
+        ),
+    input:
+        dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
+        regions_onshore=input_regions_onshore_district_heating,
+        dh_subnodes=lambda w: (
+            resources("dh_subnodes_base_s_{clusters}.geojson")
+            if config_provider("sector", "district_heating", "subnodes", "enable")(w)
+            else []
+        ),
+        land_cover=lambda w: (
+            rules.retrieve_luisa_land_cover.output["tif"]
+            if config_provider(
+                "sector", "district_heating", "ptes", "potential_limit", "enable"
+            )(w)
+            else []
+        ),
+        natura=lambda w: (
+            f"{NATURA_DATASET['folder']}/natura.tiff"
+            if config_provider(
+                "sector", "district_heating", "ptes", "potential_limit", "enable"
+            )(w)
+            and config_provider(
+                "sector", "district_heating", "ptes", "potential_limit", "natura"
+            )(w)
+            else []
+        ),
+        groundwater_depth=lambda w: (
+            storage(
+                "http://thredds-gfnl.usc.es/thredds/fileServer/GLOBALWTDFTP/annualmeans/EURASIA_WTD_annualmean.nc",
+                keep_local=True,
+            )
+            if config_provider(
+                "sector", "district_heating", "ptes", "potential_limit", "enable"
+            )(w)
+            and config_provider(
+                "sector",
+                "district_heating",
+                "ptes",
+                "potential_limit",
+                "groundwater_depth",
+            )(w)
+            else []
+        ),
+    output:
+        ptes_potentials=resources(
+            "ptes_potentials_base_s_{clusters}_{planning_horizons}.csv"
+        ),
+    resources:
+        mem_mb=5000,
+    log:
+        logs("build_ptes_potentials_s_{clusters}_{planning_horizons}.log"),
+    benchmark:
+        benchmarks("build_ptes_potentials_s_{clusters}_{planning_horizons}")
+    script:
+        scripts("build_ptes_potentials.py")
+
+
 def input_hera_data(w) -> dict[str, str]:
     """
     Generate input file paths for HERA river discharge and ambient temperature data.
@@ -1593,10 +1659,30 @@ rule build_district_heating_subnodes:
         label_column=config_provider(
             "sector", "district_heating", "subnodes", "label_column"
         ),
+        census_areas=config_provider(
+            "sector", "district_heating", "subnodes", "census_areas"
+        ),
     input:
         dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
         regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
         dh_city_lookup=resources("dh_city_lookup.csv"),
+        census=lambda w: (
+            config_provider(
+                "sector",
+                "district_heating",
+                "subnodes",
+                "census_areas",
+                "data_file",
+            )(w)
+            if config_provider(
+                "sector",
+                "district_heating",
+                "subnodes",
+                "census_areas",
+                "enable",
+            )(w)
+            else []
+        ),
     output:
         dh_subnodes=resources("dh_subnodes_base_s_{clusters}.geojson"),
         regions_onshore_extended=resources(
@@ -1932,6 +2018,11 @@ rule prepare_sector_network:
             and config_provider(
                 "sector", "district_heating", "ptes", "discharge_resistive_boosting"
             )(w)
+            else []
+        ),
+        ptes_potentials=lambda w: (
+            resources("ptes_potentials_base_s_{clusters}_{planning_horizons}.csv")
+            if config_provider("sector", "district_heating", "ptes", "enable")(w)
             else []
         ),
         heat_source_direct_utilisation_profiles=lambda w: (

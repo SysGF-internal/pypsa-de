@@ -7,11 +7,12 @@ onshore regions, and outputs subnode metadata for downstream rules.
 """
 
 import logging
+import math
 from pathlib import Path
+from zipfile import ZipFile
 
 import geopandas as gpd
 import pandas as pd
-import math
 
 from scripts._helpers import configure_logging, set_scenario_config
 
@@ -32,6 +33,161 @@ def _sanitize_label(label):
         .str.strip()
         .str.replace(r"\s+", "_", regex=True)
     ).iloc[0]
+
+
+def _load_census_data(path):
+    """
+    Load the German Zensus 100m heating raster (CSV or ZIP-of-CSV).
+
+    Returns a GeoDataFrame in EPSG:3035 with point geometries at the cell
+    centroids and the columns ``Fernheizung`` and ``Insgesamt_Heizungsart``
+    coerced to numeric.
+    """
+    csv_kwargs = {"encoding": "latin1", "sep": ";"}
+    if path.endswith(".zip"):
+        with ZipFile(path) as zip_file:
+            candidates = [
+                name
+                for name in zip_file.namelist()
+                if name.endswith(".csv") and "Heizungsart" in name
+            ]
+            if not candidates:
+                raise FileNotFoundError(
+                    f"No census heating CSV found inside archive {path}"
+                )
+            with zip_file.open(candidates[0]) as source:
+                census = pd.read_csv(source, **csv_kwargs)
+    else:
+        census = pd.read_csv(path, **csv_kwargs)
+
+    census = census.replace("\x96", 0)
+    census = gpd.GeoDataFrame(
+        census,
+        geometry=gpd.points_from_xy(census.x_mp_100m, census.y_mp_100m),
+        crs="EPSG:3035",
+    )
+
+    for column in ["Fernheizung", "Insgesamt_Heizungsart"]:
+        census[column] = pd.to_numeric(census[column], errors="coerce").fillna(0)
+
+    return census
+
+
+def _refine_census_shapes(census_cells, processing):
+    """
+    Iteratively clean and dissolve census-derived DH cell geometries per subnode.
+
+    Each iteration explodes multipolygons, drops parts smaller than
+    ``min_area[i]``, applies a buffer of ``buffer_factor[i] * sqrt(area)``
+    plus an absolute ``buffer_absolute[i]`` (both default to 0), and
+    re-dissolves by subnode ``name``.  Lists are zipped by index; any
+    short list is treated as 0 from its end.
+    """
+    refined = census_cells.copy()
+    min_areas = processing.get("min_area", [0])
+    buffer_factors = processing.get("buffer_factor", [0])
+    buffer_absolute = processing.get("buffer_absolute", 0)
+    buffer_absolutes = (
+        buffer_absolute if isinstance(buffer_absolute, list) else [buffer_absolute]
+    )
+
+    iterations = max(len(min_areas), len(buffer_factors), len(buffer_absolutes))
+    for idx in range(iterations):
+        refined = refined.explode(index_parts=False).reset_index(drop=True)
+        min_area = min_areas[idx] if idx < len(min_areas) else 0
+        buffer_factor = buffer_factors[idx] if idx < len(buffer_factors) else 0
+        buffer_abs = buffer_absolutes[idx] if idx < len(buffer_absolutes) else 0
+
+        refined = refined.loc[refined.geometry.area > min_area].copy()
+        if refined.empty:
+            break
+
+        if buffer_factor or buffer_abs:
+            refined["geometry"] = refined.geometry.buffer(
+                refined.geometry.area.pow(0.5) * buffer_factor + buffer_abs
+            )
+
+        refined = refined.dissolve("name").reset_index()
+
+    return refined
+
+
+def _refine_subnodes_with_census(
+    subnodes,
+    census,
+    min_district_heating_share,
+    processing,
+):
+    """
+    Replace ISI subnode geometries with census-derived shapes where available.
+
+    For each subnode, intersects the ISI DH polygon with the union of all
+    100m census cells whose district-heating share meets
+    ``min_district_heating_share``, then refines via ``_refine_census_shapes``.
+    Subnodes for which no census signal survives keep their ISI geometry
+    (with a warning).
+    """
+    if subnodes.empty:
+        return subnodes
+
+    eligible = census.loc[
+        census["Insgesamt_Heizungsart"] > 0,
+        ["Fernheizung", "Insgesamt_Heizungsart", "geometry"],
+    ].copy()
+    eligible["district_heating_share"] = (
+        eligible["Fernheizung"] / eligible["Insgesamt_Heizungsart"]
+    )
+    eligible = eligible.loc[
+        eligible["district_heating_share"] >= min_district_heating_share
+    ].copy()
+
+    if eligible.empty:
+        logger.warning(
+            "No census cells matched the district-heating-share threshold; keeping ISI subnode geometries"
+        )
+        return subnodes
+
+    eligible["geometry"] = eligible.geometry.buffer(50, cap_style="square")
+    eligible = eligible[["geometry"]]
+
+    subnodes_3035 = subnodes.to_crs("EPSG:3035")
+    original_shapes = subnodes_3035[["name", "geometry"]].copy()
+    census_in_subnodes = gpd.overlay(original_shapes, eligible, how="intersection")
+
+    if census_in_subnodes.empty:
+        logger.warning(
+            "Census refinement produced no overlaps with ISI DH areas; keeping ISI subnode geometries"
+        )
+        return subnodes
+
+    refined = _refine_census_shapes(
+        census_in_subnodes[["name", "geometry"]],
+        processing,
+    )
+    if refined.empty:
+        logger.warning(
+            "Census refinement removed all candidate subnode areas; keeping ISI subnode geometries"
+        )
+        return subnodes
+
+    refined = gpd.overlay(refined, original_shapes, how="intersection")
+    if refined.empty:
+        logger.warning(
+            "Processed census shapes no longer intersect ISI DH areas; keeping ISI subnode geometries"
+        )
+        return subnodes
+
+    refined = refined.dissolve("name").reset_index().set_index("name")
+    updated = subnodes_3035.copy()
+    replacement_names = updated["name"].isin(refined.index)
+    updated.loc[replacement_names, "geometry"] = updated.loc[
+        replacement_names, "name"
+    ].map(refined["geometry"])
+
+    logger.info(
+        f"Replaced ISI geometries with census-refined shapes for {replacement_names.sum()} subnodes"
+    )
+    return updated.to_crs(subnodes.crs)
 
 
 def _merge_same_city_areas(dh_areas, demand_column):
@@ -245,6 +401,7 @@ if __name__ == "__main__":
     n_subnodes = snakemake.params.get("n_subnodes", 40)
     demand_column = snakemake.params.get("demand_column", "Dem_GWh")
     label_column = snakemake.params.get("label_column", "Label")
+    census_areas = snakemake.params.get("census_areas", {})
 
     if subnode_countries:
         invalid = set(subnode_countries) - set(countries)
@@ -342,6 +499,20 @@ if __name__ == "__main__":
                 "geometry",
             ],
             crs=regions_onshore.crs,
+        )
+    elif census_areas.get("enable", False):
+        census_path = snakemake.input.get("census", "")
+        if not census_path or not Path(census_path).exists():
+            raise FileNotFoundError(
+                "Subnode census refinement is enabled but no census data file was found. "
+                "Set sector.district_heating.subnodes.census_areas.data_file to a local CSV or ZIP."
+            )
+
+        subnodes = _refine_subnodes_with_census(
+            subnodes,
+            _load_census_data(census_path),
+            census_areas.get("min_district_heating_share", 0.01),
+            census_areas.get("processing", {}),
         )
 
     regions_extended = extend_regions_onshore(regions_onshore, subnodes)

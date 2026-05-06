@@ -44,6 +44,19 @@ class _SubnodesConfig(BaseModel):
         False,
         description="Scale subnode demands to match the model's district heating demand per country, using the ISI DH area data's assumed national DH shares as denominator.",
     )
+    census_areas: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "enable": False,
+            "data_file": "",
+            "min_district_heating_share": 0.01,
+            "processing": {
+                "min_area": [10000, 100000, 0, 1000000],
+                "buffer_factor": [0.01, 0.05, 0.05, 0],
+                "buffer_absolute": 0,
+            },
+        },
+        description="Optional census-based refinement of explicit district-heating subnode geometries.",
+    )
 
 
 class _PtesConfig(BaseModel):
@@ -100,6 +113,21 @@ class _PtesConfig(BaseModel):
         35,
         gt=0,
         description="Design bottom temperature in °C for capacity calculation.",
+    )
+    potential_limit: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "enable": False,
+            "explicit_subnodes": True,
+            "remaining_regions": True,
+            "land_cover_codes": [21, 23, 32, 33],
+            "excluder_resolution": 10,
+            "min_area": 10000,
+            "default_capacity_mwh": 4500,
+            "natura": True,
+            "groundwater_depth": True,
+            "max_groundwater_depth": -10,
+        },
+        description="Optional PTES energy-capacity limits derived from eligible land within district-heating areas.",
     )
 
     @field_validator("top_temperature")
