@@ -1411,7 +1411,21 @@ def scale_capacity(n, scaling):
 
 def _get_component_pair(n, n_ref, component_type):
     """
-    Get matching component dataframes from the current and reference networks.
+    Get matching component tables from the current and reference networks.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network to be modified.
+    n_ref : pypsa.Network
+        Reference network whose optimized capacities should be reused.
+    component_type : str
+        PyPSA component type name.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        Matching component tables from ``n`` and ``n_ref``.
     """
     if component_type == "StorageUnit":
         component = n.storage_units
@@ -1423,6 +1437,23 @@ def _get_component_pair(n, n_ref, component_type):
 
 
 def _get_component_mask(lines_or_links, country, countries):
+    """
+    Identify cross-border line or link components connected to ``country``.
+
+    Parameters
+    ----------
+    lines_or_links : pd.DataFrame
+        Table of line or link components with ``bus0`` and ``bus1`` columns.
+    country : str
+        Country code to match on one side of the connection.
+    countries : list[str]
+        Other country codes to match on the opposite side.
+
+    Returns
+    -------
+    pd.Series
+        Boolean mask for cross-border components connected to ``country``.
+    """
     other_countries = "|".join(countries)
     if not other_countries:
         return pd.Series(False, index=lines_or_links.index)
@@ -1439,6 +1470,21 @@ def _get_component_mask(lines_or_links, country, countries):
 def _identify_non_german_extendable(component, component_type, countries):
     """
     Identify extendable components outside Germany or on German interconnectors.
+
+    Parameters
+    ----------
+    component : pd.DataFrame
+        Component table to filter.
+    component_type : str
+        PyPSA component type name.
+    countries : list[str]
+        Modelled country codes except Germany.
+
+    Returns
+    -------
+    pd.Series
+        Boolean mask selecting extendable components that should be fixed to
+        the reference scenario.
     """
     if component_type in ["Line", "Link"]:
         non_german = component.filter(regex="bus[012]").apply(
@@ -1463,6 +1509,20 @@ def _identify_non_german_extendable(component, component_type, countries):
 
 
 def _unfix_bottlenecks(component_df, baseline_component, component_type, indices):
+    """
+    Re-enable selected foreign bottleneck components after fixing capacities.
+
+    Parameters
+    ----------
+    component_df : pd.DataFrame
+        Component table in the current network.
+    baseline_component : pd.DataFrame
+        Matching component table from the reference network.
+    component_type : str
+        PyPSA component type name.
+    indices : pd.Index
+        Candidate component indices being fixed to the reference scenario.
+    """
     if component_type == "Link":
         virtual_links = [
             "land transport oil",
@@ -1543,7 +1603,26 @@ def _apply_capacity_limits(
     unfix_bottlenecks,
 ):
     """
-    Apply reference-based capacity limits to matching components.
+    Apply reference-based capacity limits to selected components.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network to be modified.
+    component_type : str
+        PyPSA component type name.
+    indices : pd.Index
+        Component indices to update.
+    baseline_component : pd.DataFrame
+        Matching component table from the reference network.
+    slack : float
+        Relative slack for min/max bounds around the reference optimum.
+    nom_min : bool
+        Whether to constrain the lower bound to the reference solution.
+    nom_max : bool
+        Whether to constrain the upper bound to the reference solution.
+    unfix_bottlenecks : bool
+        Whether to re-enable selected bottleneck components after fixing.
     """
     if component_type == "Store":
         nom_attr, nom_opt_attr, nom_min_attr, nom_max_attr, extendable_attr = (
@@ -1625,6 +1704,25 @@ def fix_foreign_investments(
 ):
     """
     Fix extendable foreign investments to the optimized values of a reference run.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network to be modified.
+    n_ref : pypsa.Network
+        Reference network whose optimized capacities are used as bounds or
+        fixed values.
+    slack : float, optional
+        Relative slack applied when fixing via lower and upper bounds.
+    nom_min : bool, optional
+        Whether to apply lower bounds from the reference network.
+    nom_max : bool, optional
+        Whether to apply upper bounds from the reference network.
+    unfix_bottlenecks : bool, optional
+        Whether to re-enable selected virtual or bottleneck components after
+        fixing foreign capacities.
+    lines_only : bool, optional
+        If true, only foreign line investments are fixed.
     """
     if lines_only:
         logger.info("Fixing foreign line investments based on the reference scenario.")
