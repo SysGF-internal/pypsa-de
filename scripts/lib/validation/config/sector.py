@@ -119,7 +119,7 @@ class _PtesConfig(BaseModel):
             "enable": False,
             "explicit_subnodes": True,
             "remaining_regions": True,
-            "land_cover_codes": [21, 23, 32, 33],
+            "osm_landcover_codes": [21, 23, 32, 33],
             "excluder_resolution": 10,
             "min_area": 10000,
             "default_capacity_mwh": 4500,

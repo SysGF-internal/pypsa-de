@@ -55,6 +55,7 @@ import rasterio
 import xarray as xr
 from atlite.gis import ExclusionContainer, shape_availability
 from rasterio.windows import Window
+from shapely.geometry import box as shapely_box
 
 from scripts._helpers import configure_logging, set_scenario_config
 
@@ -72,12 +73,13 @@ def get_chunked_raster(
     dataset_path: str,
     bounds: tuple[float, float, float, float],
     buffer_distance: float = 1000,
-) -> rasterio.io.DatasetReader:
+) -> rasterio.io.DatasetReader | None:
     """
     Return a windowed copy of a raster around ``bounds`` (CRS-native units).
 
     A small temporary GeoTIFF is written to disk and opened for reading;
     the file is auto-deleted when the returned dataset is garbage-collected.
+    Returns ``None`` when ``bounds`` lies entirely outside the raster extent.
     """
     with rasterio.open(dataset_path) as src:
         buffered_bounds = (
@@ -87,12 +89,20 @@ def get_chunked_raster(
             bounds[3] + buffer_distance,
         )
         window = rasterio.windows.from_bounds(*buffered_bounds, transform=src.transform)
-        window = Window(
-            int(max(0, window.col_off)),
-            int(max(0, window.row_off)),
-            int(min(src.width - int(window.col_off), window.width)),
-            int(min(src.height - int(window.row_off), window.height)),
-        )
+        # Compute the true intersection of the geometry window with the raster.
+        # Clamping col_off/row_off alone is not enough: when the window starts far
+        # before the raster origin (col_off << 0) and also ends before it
+        # (col_off + width < 0), min(src.width - col_off_clamped, width) is
+        # spuriously positive. Use explicit start/end clamping instead.
+        col_start = max(0, int(window.col_off))
+        col_end = min(src.width, int(window.col_off + window.width))
+        row_start = max(0, int(window.row_off))
+        row_end = min(src.height, int(window.row_off + window.height))
+        width = max(0, col_end - col_start)
+        height = max(0, row_end - row_start)
+        if width == 0 or height == 0:
+            return None
+        window = Window(col_start, row_start, width, height)
 
         with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as temp:
             temp_path = temp.name
@@ -114,12 +124,6 @@ def get_chunked_raster(
     dataset = rasterio.open(temp_path)
     weakref.finalize(dataset, _cleanup_temp_file, temp_path)
     return dataset
-
-
-def _valid_band_mask(band: np.ndarray, nodata: float | None) -> np.ndarray:
-    if nodata is None:
-        return np.isfinite(band)
-    return band != nodata
 
 
 def _filter_by_groundwater_depth(
@@ -168,33 +172,49 @@ def _filter_by_groundwater_depth(
 
 def eligible_area_in_region(
     geometry,
-    land_cover_path: str,
+    osm_land_cover_path: str,
     natura_path: str | None,
     excluder_resolution: int,
-    land_cover_codes: list[int],
+    osm_landcover_codes: list[int],
     groundwater: xr.Dataset | None = None,
     max_groundwater_depth: float | None = None,
 ) -> float:
     """
     Compute the eligible PTES land area inside ``geometry`` in m².
 
-    Eligibility is defined as land-cover pixels matching ``land_cover_codes``
-    (LUISA), optionally outside any Natura 2000 protected area, and
-    optionally with a sufficiently deep groundwater table.
+    Eligibility is defined as land-cover pixels matching ``osm_landcover_codes``
+    (OSM-based land cover raster from HeiDATA, Heidelberg University),
+    optionally outside any Natura 2000 protected area, and optionally with
+    a sufficiently deep groundwater table.
     """
     bounds = geometry.bounds
-    land_cover = get_chunked_raster(land_cover_path, bounds)
+    land_cover = get_chunked_raster(osm_land_cover_path, bounds)
+    if land_cover is None:
+        return 0.0
+
+    # Clip geometry to the chunked raster's extent (EPSG:3035).
+    # shape_availability allocates an output array sized by the geometry's
+    # bounding box; if the geometry extends far outside the raster the
+    # projected_mask call will raise WindowError/ValueError or OOM.
+    geometry = geometry.intersection(shapely_box(*land_cover.bounds))
+    if geometry.is_empty:
+        return 0.0
     natura = get_chunked_raster(natura_path, bounds) if natura_path else None
 
     try:
         excluder = ExclusionContainer(crs=3035, res=excluder_resolution)
-        excluder.add_raster(land_cover, codes=land_cover_codes, invert=True, crs=3035)
+        excluder.add_raster(
+            land_cover, codes=osm_landcover_codes, invert=True, crs=3035,
+        )
         if natura is not None:
-            excluder.add_raster(natura, codes=[1], invert=False, crs=3035)
+            excluder.add_raster(
+                natura, codes=[1], invert=False, crs=3035,
+            )
 
         region = gpd.GeoDataFrame(geometry=[geometry], crs="EPSG:3035")
+        # shape_availability returns a boolean array: True = eligible, False = excluded/outside
         band, transform = shape_availability(region.geometry, excluder)
-        row_indices, col_indices = np.where(_valid_band_mask(band, land_cover.nodata))
+        row_indices, col_indices = np.where(band)
 
         if len(row_indices) == 0:
             return 0.0
@@ -236,7 +256,7 @@ def build_ptes_potentials(
     dh_areas: gpd.GeoDataFrame,
     subnode_names: set[str],
     params: dict,
-    land_cover_path: str,
+    osm_land_cover_path: str,
     natura_path: str | None,
     groundwater_path: str | None = None,
 ) -> pd.DataFrame:
@@ -259,8 +279,8 @@ def build_ptes_potentials(
         Contents of ``sector.district_heating.ptes.potential_limit``.
         Switches ``explicit_subnodes`` and ``remaining_regions`` decide
         which set of regions is limited.
-    land_cover_path : str
-        Path to the LUISA land-cover raster (EPSG:3035).
+    osm_land_cover_path : str
+        Path to the OSM-based land-cover raster (EPSG:3035, from HeiDATA).
     natura_path : str | None
         Path to the Natura 2000 raster, or ``None`` when not used.
     groundwater_path : str | None
@@ -290,10 +310,10 @@ def build_ptes_potentials(
     if not limit_explicit_subnodes and not limit_remaining_regions:
         return potentials.to_frame()
 
-    if not land_cover_path:
+    if not osm_land_cover_path:
         raise ValueError(
-            "PTES potential limiting is enabled but no land-cover raster path "
-            "was provided. Check that retrieve_luisa_land_cover is wired in."
+            "PTES potential limiting is enabled but no OSM land-cover raster path "
+            "was provided. Check that the HeiDATA storage input is wired in."
         )
 
     target_names = []
@@ -332,19 +352,24 @@ def build_ptes_potentials(
         else None
     )
     try:
-        dh_regions = dh_regions.dissolve("name").reset_index()
-        for row in dh_regions.itertuples(index=False):
-            area_m2 = eligible_area_in_region(
-                row.geometry,
-                land_cover_path,
-                natura_path,
-                params["excluder_resolution"],
-                params["land_cover_codes"],
-                groundwater=groundwater,
-                max_groundwater_depth=max_groundwater_depth,
-            )
-            potentials.loc[row.name] = (
-                area_m2 / params["min_area"] * params["default_capacity_mwh"]
+        # Iterate per individual DH area polygon clipped to each region.
+        # Dissolving by name first would merge all DH areas in a large cluster
+        # into one multi-polygon whose bounding box can be hundreds of km wide,
+        # causing atlite's projected_mask to allocate a huge array (OOM).
+        for region_name, group in dh_regions.groupby("name"):
+            total_area_m2 = 0.0
+            for geom in group.geometry:
+                total_area_m2 += eligible_area_in_region(
+                    geom,
+                    osm_land_cover_path,
+                    natura_path,
+                    params["excluder_resolution"],
+                    params["osm_landcover_codes"],
+                    groundwater=groundwater,
+                    max_groundwater_depth=max_groundwater_depth,
+                )
+            potentials.loc[region_name] = (
+                total_area_m2 / params["min_area"] * params["default_capacity_mwh"]
             )
     finally:
         if groundwater is not None:
@@ -384,7 +409,7 @@ if __name__ == "__main__":
         dh_areas,
         subnode_names,
         params,
-        snakemake.input.get("land_cover", ""),
+        snakemake.input.get("osm_land_cover", ""),
         natura_path,
         groundwater_path,
     )

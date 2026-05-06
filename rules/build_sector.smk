@@ -470,8 +470,11 @@ rule build_ptes_potentials:
             if config_provider("sector", "district_heating", "subnodes", "enable")(w)
             else []
         ),
-        land_cover=lambda w: (
-            rules.retrieve_luisa_land_cover.output["tif"]
+        osm_land_cover=lambda w: (
+            storage(
+                "https://heidata.uni-heidelberg.de/api/access/datafile/23053?format=original&gbrecs=true",
+                keep_local=True,
+            )
             if config_provider(
                 "sector", "district_heating", "ptes", "potential_limit", "enable"
             )(w)
