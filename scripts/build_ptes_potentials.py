@@ -62,6 +62,21 @@ from scripts._helpers import configure_logging, set_scenario_config
 logger = logging.getLogger(__name__)
 
 
+def _read_subnode_names(path: str | None) -> set[str]:
+    if not path:
+        return set()
+
+    dh_subnodes = gpd.read_file(path)
+    if dh_subnodes.empty:
+        return set()
+    if "name" not in dh_subnodes.columns:
+        raise KeyError(
+            f"Expected 'name' column in non-empty dh_subnodes file {path}, got columns {list(dh_subnodes.columns)}"
+        )
+
+    return set(dh_subnodes["name"].dropna())
+
+
 def _cleanup_temp_file(path: str) -> None:
     try:
         os.unlink(path)
@@ -395,12 +410,7 @@ if __name__ == "__main__":
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
     dh_areas = gpd.read_file(snakemake.input.dh_areas)
 
-    dh_subnodes_path = snakemake.input.get("dh_subnodes")
-    if dh_subnodes_path:
-        dh_subnodes = gpd.read_file(dh_subnodes_path)
-        subnode_names = set(dh_subnodes["name"])
-    else:
-        subnode_names = set()
+    subnode_names = _read_subnode_names(snakemake.input.get("dh_subnodes"))
 
     natura_path = snakemake.input.get("natura") or None
     groundwater_path = snakemake.input.get("groundwater_depth") or None
