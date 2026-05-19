@@ -1682,10 +1682,6 @@ def _apply_capacity_limits(
                 ),
                 axis=1,
             )
-        else:
-            component_df.loc[indices, nom_max_attr] = baseline_component.loc[
-                indices, nom_max_attr
-            ]
 
         if unfix_bottlenecks:
             _unfix_bottlenecks(
