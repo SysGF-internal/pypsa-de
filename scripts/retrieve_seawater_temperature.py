@@ -47,9 +47,30 @@ from scripts._helpers import (
 
 logger = logging.getLogger(__name__)
 
+COPERNICUSMARINE_USERNAME = os.environ.get("COPERNICUSMARINE_USERNAME")
+COPERNICUSMARINE_PASSWORD = os.environ.get("COPERNICUSMARINE_PASSWORD")
+
+
+def get_copernicus_credentials() -> dict[str, str]:
+    """Return explicit Copernicus credentials from the environment, if set."""
+    username = COPERNICUSMARINE_USERNAME or None
+    password = COPERNICUSMARINE_PASSWORD or None
+
+    if (username is None) != (password is None):
+        raise ValueError(
+            "Set both COPERNICUSMARINE_USERNAME and "
+            "COPERNICUSMARINE_PASSWORD, or leave both empty."
+        )
+
+    if username is None:
+        return {}
+
+    return {"username": username, "password": password}
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "retrieve_seawater_temperature",
@@ -81,30 +102,25 @@ if __name__ == "__main__":
             f"Successfully downloaded test-cutout seawater temperature data to {snakemake.output.seawater_temperature}"
         )
     else:
-        # Download seawater temperature data from Copernicus Marine Service
-        # Dataset: Global Ocean Physics Reanalysis (daily, 0.083° resolution)
-        # Variable: thetao (potential temperature in °C)
-        # Spatial coverage: European waters (-12°W to 42°E, 33°N to 72°N)
-        # Depth range: 5-15m (suitable for heat pump intake depths)
         logger.info(
             f"Downloading seawater temperature data for year {snakemake.wildcards.year}"
         )
 
         _ = copernicusmarine.subset(
-            dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",  # Global ocean physics reanalysis
+            dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
+            **get_copernicus_credentials(),
             start_datetime=f"{snakemake.wildcards.year}-01-01",
             end_datetime=f"{int(snakemake.wildcards.year)}-12-31",
-            minimum_longitude=-12,  # Western European boundary
-            maximum_longitude=42,  # Eastern European boundary
-            minimum_latitude=33,  # Southern European boundary
-            maximum_latitude=72,  # Northern European boundary
-            variables=["thetao"],  # Potential temperature [°C]
-            minimum_depth=5,  # Near-surface depth for heat pumps [m]
-            maximum_depth=15,  # Near-surface depth for heat pumps [m]
+            minimum_longitude=-12,
+            maximum_longitude=42,
+            minimum_latitude=33,
+            maximum_latitude=72,
+            variables=["thetao"],
+            minimum_depth=5,
+            maximum_depth=15,
             output_filename=snakemake.output.seawater_temperature,
         )
 
-        # Verify successful download
         if not os.path.exists(snakemake.output.seawater_temperature):
             raise FileNotFoundError(
                 f"Failed to retrieve seawater temperature data and save to {snakemake.output.seawater_temperature}. "

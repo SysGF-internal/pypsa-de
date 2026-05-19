@@ -5,16 +5,9 @@
 run:
   prefix: 20250514_dhsubnodes
   name:
-  - Baseline
-  # - No_PTES
-  # - LowPTESCAPEX
-  # - HighPTESCAPEX
-  # - LowStandingLosses
-  # - HighStandingLosses
-  # - LowGroundWaterDepth
-  # - HighGroundWaterDepth
-  # - LowEtPRatio
-  # - HighEtPRatio
+  - NoPTES_MidSupplyTemperature_MidDH_init
+  - NoPTES_MidSupplyTemperature_MidDH
+  - MidSupplyTemperature_MidDH_hpboost_10Cbottom
   scenarios:
     enable: true
     manual_file: config/scenarios.sysgf.yaml
@@ -28,6 +21,10 @@ run:
     - industry_sector_ratios
     - build_industry_sector_ratios   # This is necessary to save build_industry_sector_ratios_data.log in the correct folder
     - modify_existing_heating
+
+remote:
+  ssh: "zecm"
+  path: "/home/users/c/cpschau/scratch/pypsa-sysgf"
 
 foresight: myopic
 
@@ -48,35 +45,159 @@ scenario:
   # - 2040
   - 2045
 
+fix_foreign_investments:
+  enable: false
+  # Default reference; individual scenarios in config/scenarios.sysgf.yaml
+  # override this with their own family-specific reference (e.g. the "_init"
+  # run of the same temperature/DH bucket).
+  reference_scenario: NoPTES_MidSupplyTemperature_MidDH
+  nom_min: true
+  nom_max: true
+  lines_only: false
+  unfix_virtual_components: true
+  slack: 0
+
 clustering:
   temporal:
     resolution_sector: 365H
+
+co2_budget:
+  2045: 0.00
 
 adjustments:
   electricity: false
   sector:
     absolute:
-      StorageUnit:
+      Store:
         urban central water pits:
-          standing_loss: 0.00012121
+          standing_loss: 0.000078
         urban central water tanks:
-          standing_loss: 0.00015476
+          standing_loss: 0.000077
+    ### Additional adjustments to scale heat pump costs in relation to air source heat pumps
+    # factor:
+    #   Link:
+    #     urban central air heat pump:
+    #       marginal_cost: 1.8
+    #     urban central geothermal heat pump:
+    #       capital_cost: 0.66
+    #       marginal_cost: 2.02
+    #     urban central river_water heat pump:
+    #       capital_cost: 0.86
+    #       marginal_cost: 1.8
+    #     urban central sea_water heat pump:
+    #       capital_cost: 0.86
+    #       marginal_cost: 1.8
+    #     urban central electrolysis excess heat pump:
+    #       capital_cost: 0.76
+    #       marginal_cost: 1.8
+    #     urban central ptes heat pump:
+    #       capital_cost: 0.66
+    #       marginal_cost: 1.8
+
+electricity:
+  renewable_carriers: [solar, solar-hsat, onwind, offwind-ac, offwind-dc, hydro]
 
 wasserstoff_kernnetz:
   enable: false
 
 sector:
+  chp:
+    enable: true
   district_heating:
-    potential: 0.5
+    potential:
+      DE: 0.5
+      default: 0.5
+    progress:
+      2045: 1.0
+    supply_temperature_approximation:
+      max_forward_temperature_baseyear:
+        FR: 110
+        DK: 75
+        DE: 124
+        CZ: 130
+        FI: 115
+        PL: 130
+        SE: 102
+        IT: 90
+      min_forward_temperature_baseyear:
+        DE: 82
+      return_temperature_baseyear:
+        DE: 60
+      lower_threshold_ambient_temperature: 0
+      upper_threshold_ambient_temperature: 10
+      rolling_window_ambient_temperature: 72
+      relative_annual_temperature_reduction: 0.01
     subnodes:
       enable: true
+      n_subnodes: 40
+      demand_share: null
+      countries: []
+      demand_column: Dem_GWh
+      label_column: Label
+      use_isi_data_assumptions: false
+      census_areas:
+        enable: false
+        data_file: ""
+        min_district_heating_share: 0.01
+        processing:
+          min_area: [10000, 100000, 0, 1000000]
+          buffer_factor: [0.01, 0.05, 0.05, 0]
+          buffer_absolute: 5
+    ignore_missing_geothermal_data: true
     limited_heat_sources:
       geothermal:
         ignore_missing_regions: true
+        requires_generator: true
+      electrolysis excess:
+        constant_temperature_celsius: 70
+        ignore_missing_regions: false
+        requires_generator: false
+      river_water:
+        constant_temperature_celsius: false
+        requires_generator: true
+    direct_utilisation_heat_sources:
+      - geothermal
+    ptes:
+      enable: true
+      dynamic_capacity: false
+      temperature_dependent_capacity: false
+      charge_boosting_required: false
+      discharge_resistive_boosting: false
+      top_temperature: 90
+      bottom_temperature: 35
+      design_top_temperature: 90
+      design_bottom_temperature: 35
+      potential_limit:
+        enable: true
+        explicit_subnodes: true
+        remaining_regions: true
+        osm_landcover_codes: [21, 23, 32, 33]
+        excluder_resolution: 10
+        min_area: 10000
+        default_capacity_mwh: 4500
+        natura: true
+        groundwater_depth: true
+        max_groundwater_depth: -10
+    ates:
+      enable: false
+    dh_area_buffer: 5000
+  tes: true
+  tes_tau:
+    decentral: 3
+    central: 180
   heat_pump_sources:
     urban central:
     - air
+    - ptes
     - geothermal
+    - river_water
+    - sea_water
+    - electrolysis_waste
+    - fuel_cell_waste
+    - fischer_tropsch_waste
+    - haber_bosch_waste
+    - sabatier_waste
+    - methanolisation_waste
     urban decentral:
     - air
     rural:
@@ -98,12 +219,12 @@ solving:
 
 pypsa-de:
   # Reference scenario for sysgf cross-scenario plots (run scenario name, not Ariadne name)
-  sysgf_reference_scenario: Baseline
+  sysgf_reference_scenario: NoPTES_MidSupplyTemperature_MidDH
   sensitivity_runs: []
   plotting:
     # Pairs of (scenario, no_ptes_reference) used in cost-impact and summary plots
     scenario_tuples:
-      - [Baseline, No_PTES]
+      - [MidSupplyTemperature_MidDH_hpboost_10Cbottom, NoPTES_MidSupplyTemperature_MidDH]
     override_tech_colors: {}
     drop_losses: true
     subnodes_only: true

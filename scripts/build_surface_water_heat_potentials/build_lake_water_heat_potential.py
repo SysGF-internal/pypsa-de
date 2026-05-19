@@ -60,7 +60,9 @@ from scripts._helpers import (
     set_scenario_config,
     update_config_from_wildcards,
 )
-from approximators.lake_water_heat_approximator import LakeWaterHeatApproximator
+from scripts.build_surface_water_heat_potentials.approximators.lake_water_heat_approximator import (
+    LakeWaterHeatApproximator,
+)
 
 warnings.filterwarnings(
     "ignore",
@@ -312,7 +314,7 @@ def set_dask_chunk_size(
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "build_lake_water_heat_potential",

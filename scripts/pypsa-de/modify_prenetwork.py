@@ -940,7 +940,9 @@ def modify_industry_demand(
     new_demand = pd.read_csv(
         industry_energy_demand_file,
         index_col=0,
-    )[str(year)].mul(1e6)
+    )[
+        str(year)
+    ].mul(1e6)
 
     subcategories = ["HVC", "Methanol", "Chlorine", "Ammonia"]
     carrier = ["hydrogen", "methane", "naphtha"]
@@ -1184,9 +1186,9 @@ def force_connection_nep_offshore(n, current_year, costs):
 
     if int(snakemake.params.offshore_nep_force["delay_years"]) != 0:
         # Modify 'Inbetriebnahmejahr' by adding the delay years for rows where 'Inbetriebnahmejahr' > 2025
-        offshore.loc[offshore["Inbetriebnahmejahr"] > 2025, "Inbetriebnahmejahr"] += (
-            int(snakemake.params.offshore_nep_force["delay_years"])
-        )
+        offshore.loc[
+            offshore["Inbetriebnahmejahr"] > 2025, "Inbetriebnahmejahr"
+        ] += int(snakemake.params.offshore_nep_force["delay_years"])
         offshore.loc[offshore["Inbetriebnahmejahr"] <= 2025, "Inbetriebnahmejahr"] += 1
         logger.info(
             f"Delaying NEP offshore connection points by {snakemake.params.offshore_nep_force['delay_years']} years."
@@ -1407,6 +1409,353 @@ def scale_capacity(n, scaling):
                 ]
 
 
+def _get_component_pair(n, n_ref, component_type):
+    """
+    Get matching component tables from the current and reference networks.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network to be modified.
+    n_ref : pypsa.Network
+        Reference network whose optimized capacities should be reused.
+    component_type : str
+        PyPSA component type name.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        Matching component tables from ``n`` and ``n_ref``.
+    """
+    if component_type == "StorageUnit":
+        component = n.storage_units
+        baseline_component = n_ref.storage_units
+    else:
+        component = getattr(n, component_type.lower() + "s")
+        baseline_component = getattr(n_ref, component_type.lower() + "s")
+    return component, baseline_component
+
+
+def _get_component_mask(lines_or_links, country, countries):
+    """
+    Identify cross-border line or link components connected to ``country``.
+
+    Parameters
+    ----------
+    lines_or_links : pd.DataFrame
+        Table of line or link components with ``bus0`` and ``bus1`` columns.
+    country : str
+        Country code to match on one side of the connection.
+    countries : list[str]
+        Other country codes to match on the opposite side.
+
+    Returns
+    -------
+    pd.Series
+        Boolean mask for cross-border components connected to ``country``.
+    """
+    other_countries = "|".join(countries)
+    if not other_countries:
+        return pd.Series(False, index=lines_or_links.index)
+
+    return (
+        lines_or_links.bus0.str.contains(country)
+        & lines_or_links.bus1.str.contains(other_countries)
+    ) | (
+        lines_or_links.bus0.str.contains(other_countries)
+        & lines_or_links.bus1.str.contains(country)
+    )
+
+
+def _identify_non_german_extendable(component, component_type, countries):
+    """
+    Identify extendable components outside Germany or on German interconnectors.
+
+    Parameters
+    ----------
+    component : pd.DataFrame
+        Component table to filter.
+    component_type : str
+        PyPSA component type name.
+    countries : list[str]
+        Modelled country codes except Germany.
+
+    Returns
+    -------
+    pd.Series
+        Boolean mask selecting extendable components that should be fixed to
+        the reference scenario.
+    """
+    if component_type in ["Line", "Link"]:
+        non_german = component.filter(regex="bus[012]").apply(
+            lambda values: (~values.str.startswith("DE").any())
+            & (not values.name.startswith("EU")),
+            axis=1,
+        )
+        non_german = non_german | _get_component_mask(component, "DE", countries)
+    else:
+        non_german = ~component.bus.str.startswith(("DE", "EU"))
+
+    extendable = (
+        component.e_nom_extendable
+        if component_type == "Store"
+        else (
+            component.s_nom_extendable
+            if component_type == "Line"
+            else component.p_nom_extendable
+        )
+    )
+    return extendable & non_german
+
+
+def _unfix_bottlenecks(component_df, baseline_component, component_type, indices):
+    """
+    Re-enable selected foreign bottleneck components after fixing capacities.
+
+    Parameters
+    ----------
+    component_df : pd.DataFrame
+        Component table in the current network.
+    baseline_component : pd.DataFrame
+        Matching component table from the reference network.
+    component_type : str
+        PyPSA component type name.
+    indices : pd.Index
+        Candidate component indices being fixed to the reference scenario.
+    """
+    if component_type == "Link":
+        virtual_links = [
+            "land transport oil",
+            "land transport fuel cell",
+            "solid biomass for industry",
+            "gas for industry",
+            "industry methanol",
+            "naphtha for industry",
+            "process emissions",
+            "coal for industry",
+            "H2 for industry",
+            "shipping methanol",
+            "shipping oil",
+            "kerosene for aviation",
+            "agriculture machinery oil",
+            "co2 sequestered",
+        ]
+        virtual_idx = component_df.index[
+            component_df.carrier.isin(virtual_links)
+        ].intersection(indices)
+        component_df.loc[virtual_idx, "p_nom_extendable"] = True
+
+        bottleneck_links = [
+            "electricity distribution grid",
+            "waste CHP",
+            "SMR",
+            "rural gas boiler",
+            "urban decentral gas boiler",
+            "rural biomass boiler",
+            "urban decentral biomass boiler",
+        ]
+        bottleneck_idx = component_df.index[
+            component_df.carrier.isin(bottleneck_links)
+        ].intersection(indices)
+        component_df.loc[bottleneck_idx, "p_nom_extendable"] = baseline_component.loc[
+            bottleneck_idx, "p_nom_extendable"
+        ]
+        component_df.loc[bottleneck_idx, "p_nom_min"] = baseline_component.loc[
+            bottleneck_idx, "p_nom_opt"
+        ]
+
+        waste_idx = component_df.index[
+            component_df.carrier.eq("HVC to air")
+            & ~component_df.index.str.startswith("DE")
+        ].intersection(indices)
+        component_df.loc[waste_idx, "p_nom_extendable"] = True
+        component_df.loc[waste_idx, "p_nom_min"] = baseline_component.loc[
+            waste_idx, "p_nom_opt"
+        ]
+
+    if component_type == "Generator":
+        fuels = ["lignite", "coal", "oil primary", "uranium", "gas primary"]
+        vents = [
+            "urban central heat vent",
+            "rural heat vent",
+            "urban decentral heat vent",
+        ]
+        generator_idx = component_df.index[
+            component_df.carrier.isin(fuels + vents)
+        ].intersection(indices)
+        component_df.loc[generator_idx, "p_nom_extendable"] = True
+
+    if component_type == "Store":
+        store_idx = component_df.index[
+            component_df.carrier.isin(["co2", "co2 sequestered"])
+        ].intersection(indices)
+        component_df.loc[store_idx, "e_nom_extendable"] = True
+
+
+def _apply_capacity_limits(
+    n,
+    component_type,
+    indices,
+    baseline_component,
+    slack,
+    nom_min,
+    nom_max,
+    unfix_bottlenecks,
+):
+    """
+    Apply reference-based capacity limits to selected components.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network to be modified.
+    component_type : str
+        PyPSA component type name.
+    indices : pd.Index
+        Component indices to update.
+    baseline_component : pd.DataFrame
+        Matching component table from the reference network.
+    slack : float
+        Relative slack for min/max bounds around the reference optimum.
+    nom_min : bool
+        Whether to constrain the lower bound to the reference solution.
+    nom_max : bool
+        Whether to constrain the upper bound to the reference solution.
+    unfix_bottlenecks : bool
+        Whether to re-enable selected bottleneck components after fixing.
+    """
+    if component_type == "Store":
+        nom_attr, nom_opt_attr, nom_min_attr, nom_max_attr, extendable_attr = (
+            "e_nom",
+            "e_nom_opt",
+            "e_nom_min",
+            "e_nom_max",
+            "e_nom_extendable",
+        )
+        component_df = n.stores
+    elif component_type == "Line":
+        nom_attr, nom_opt_attr, nom_min_attr, nom_max_attr, extendable_attr = (
+            "s_nom",
+            "s_nom_opt",
+            "s_nom_min",
+            "s_nom_max",
+            "s_nom_extendable",
+        )
+        component_df = n.lines
+    else:
+        nom_attr, nom_opt_attr, nom_min_attr, nom_max_attr, extendable_attr = (
+            "p_nom",
+            "p_nom_opt",
+            "p_nom_min",
+            "p_nom_max",
+            "p_nom_extendable",
+        )
+        component_df = n.df(component_type)
+
+    if nom_min and nom_max and slack == 0:
+        if component_type == "Line":
+            component_df.loc[indices] = baseline_component.loc[indices]
+            component_df.loc[indices, extendable_attr] = False
+        else:
+            component_df.loc[indices, nom_attr] = baseline_component.loc[
+                indices, nom_opt_attr
+            ]
+            component_df.loc[indices, extendable_attr] = False
+    else:
+        if nom_min:
+            component_df.loc[indices, nom_min_attr] = baseline_component.loc[
+                indices
+            ].apply(
+                lambda row: max(
+                    row[nom_opt_attr] * (1 - slack),
+                    row[nom_min_attr],
+                ),
+                axis=1,
+            )
+        if nom_max:
+            component_df.loc[indices, nom_max_attr] = baseline_component.loc[
+                indices
+            ].apply(
+                lambda row: min(
+                    np.ceil(row[nom_opt_attr]) * (1 + slack),
+                    row[nom_max_attr],
+                ),
+                axis=1,
+            )
+
+        if unfix_bottlenecks:
+            _unfix_bottlenecks(
+                component_df, baseline_component, component_type, indices
+            )
+
+
+def fix_foreign_investments(
+    n,
+    n_ref,
+    slack=0,
+    nom_min=True,
+    nom_max=False,
+    unfix_bottlenecks=False,
+    lines_only=False,
+):
+    """
+    Fix extendable foreign investments to the optimized values of a reference run.
+
+    Parameters
+    ----------
+    n : pypsa.Network
+        Network to be modified.
+    n_ref : pypsa.Network
+        Reference network whose optimized capacities are used as bounds or
+        fixed values.
+    slack : float, optional
+        Relative slack applied when fixing via lower and upper bounds.
+    nom_min : bool, optional
+        Whether to apply lower bounds from the reference network.
+    nom_max : bool, optional
+        Whether to apply upper bounds from the reference network.
+    unfix_bottlenecks : bool, optional
+        Whether to re-enable selected virtual or bottleneck components after
+        fixing foreign capacities.
+    lines_only : bool, optional
+        If true, only foreign line investments are fixed.
+    """
+    if lines_only:
+        logger.info("Fixing foreign line investments based on the reference scenario.")
+        investment_components = ["Line"]
+    else:
+        logger.info("Fixing foreign investments based on the reference scenario.")
+        investment_components = ["Generator", "StorageUnit", "Store", "Link", "Line"]
+
+    countries = n.buses.country.unique()
+    countries = countries[(countries != "") & (countries != "DE") & ~pd.isna(countries)]
+
+    for component_type in investment_components:
+        component, baseline_component = _get_component_pair(n, n_ref, component_type)
+        to_fix = _identify_non_german_extendable(component, component_type, countries)
+        if not to_fix.any():
+            continue
+
+        indices = component.index[to_fix].intersection(baseline_component.index)
+        if indices.empty:
+            continue
+
+        _apply_capacity_limits(
+            n,
+            component_type,
+            indices,
+            baseline_component,
+            slack,
+            nom_min,
+            nom_max,
+            unfix_bottlenecks,
+        )
+
+        logger.info(
+            "Fixed %s %s components outside Germany", len(indices), component_type
+        )
+
+
 def limit_cross_border_flows_ac(n, s_max_pu):
     logger.info(
         f"Limiting AC cross-border flows between all countries to {s_max_pu} of maximum capacity."
@@ -1491,6 +1840,28 @@ if __name__ == "__main__":
     scale_capacity(n, snakemake.params.scale_capacity)
 
     sanitize_custom_columns(n)
+
+    current_run = getattr(snakemake.wildcards, "run", None)
+
+    if (
+        snakemake.params.fix_foreign_investments["enable"]
+        and current_run is not None
+        and current_run
+        != snakemake.params.fix_foreign_investments["reference_scenario"]
+    ):
+        logger.info(
+            "Fixing investments for components outside Germany based on the reference scenario."
+        )
+        n_ref = pypsa.Network(snakemake.input.reference_network)
+        fix_foreign_investments(
+            n,
+            n_ref,
+            snakemake.params.fix_foreign_investments["slack"],
+            snakemake.params.fix_foreign_investments["nom_min"],
+            snakemake.params.fix_foreign_investments["nom_max"],
+            snakemake.params.fix_foreign_investments["unfix_virtual_components"],
+            snakemake.params.fix_foreign_investments["lines_only"],
+        )
 
     if current_year in snakemake.params.uba_for_industry:
         if current_year not in [2025, 2030, 2035]:

@@ -44,13 +44,16 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-from _helpers import (
+from scripts._helpers import (
     configure_logging,
     get_snapshots,
     set_scenario_config,
     update_config_from_wildcards,
 )
-from approximators.sea_water_heat_approximator import SeaWaterHeatApproximator
+from scripts.build_surface_water_heat_potentials.approximators.sea_water_heat_approximator import (
+    SeaWaterHeatApproximator,
+)
+from rioxarray.exceptions import NoDataInBounds, OneDimensionalRaster
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +109,80 @@ def _create_empty_datasets(
     return spatial_aggregate, temporal_aggregate
 
 
+def _empty_result_for_region(
+    region: gpd.GeoDataFrame,
+    snapshots: pd.DatetimeIndex,
+) -> dict[str, xr.Dataset]:
+    region_center = region.to_crs("EPSG:3035").centroid.to_crs("EPSG:4326").iloc[0]
+    spatial_aggregate, temporal_aggregate = _create_empty_datasets(
+        snapshots,
+        region_center.x,
+        region_center.y,
+    )
+    return {
+        "spatial aggregate": spatial_aggregate,
+        "temporal aggregate": temporal_aggregate,
+    }
+
+
+def _load_regional_seawater_temperature(
+    seawater_temperature_fn: str,
+    minx: float,
+    miny: float,
+    maxx: float,
+    maxy: float,
+) -> xr.DataArray | None:
+    water_temperature = (
+        xr.open_mfdataset(
+            seawater_temperature_fn,
+            chunks={
+                "time": "auto",
+                "latitude": "auto",
+                "longitude": "auto",
+                "depth": 1,
+            },
+        )["thetao"]
+        .mean(dim="depth")
+        .rio.write_crs("EPSG:4326")
+    )
+
+    try:
+        water_temperature = water_temperature.rio.clip_box(
+            minx,
+            miny,
+            maxx,
+            maxy,
+            auto_expand=True,
+        ).rio.reproject("EPSG:3035")
+    except (NoDataInBounds, OneDimensionalRaster, ValueError) as exc:
+        logger.warning(
+            "Sea-water temperature clip failed for bounds (%.5f, %.5f, %.5f, %.5f): %s",
+            minx,
+            miny,
+            maxx,
+            maxy,
+            exc,
+        )
+        return None
+
+    if any(water_temperature.sizes.get(dim, 0) < 2 for dim in ["x", "y"]):
+        logger.warning(
+            "Sea-water temperature clip for bounds (%.5f, %.5f, %.5f, %.5f) collapsed to x=%s, y=%s; using empty result",
+            minx,
+            miny,
+            maxx,
+            maxy,
+            water_temperature.sizes.get("x", 0),
+            water_temperature.sizes.get("y", 0),
+        )
+        return None
+
+    return water_temperature
+
+
 def get_regional_result(
     seawater_temperature_fn: str,
-    region: gpd.GeoSeries,
+    region: gpd.GeoDataFrame,
     dh_areas: gpd.GeoDataFrame,
     snapshots: pd.DatetimeIndex,
 ) -> dict[str, xr.Dataset]:
@@ -119,7 +193,7 @@ def get_regional_result(
     ----------
     seawater_temperature_fn : str
         Path to NetCDF file containing sea water temperature data.
-    region : geopandas.GeoSeries
+    region : geopandas.GeoDataFrame
         Geographical region for which to compute the heat potential.
     dh_areas : geopandas.GeoDataFrame
         District heating areas to intersect with the region.
@@ -133,63 +207,36 @@ def get_regional_result(
         'spatial aggregate' contains average temperature.
         'temporal aggregate' contains temperature for analysis/plotting.
     """
-    # Store original region for fallback centroid calculation
     original_region = region.copy()
 
-    # Intersect region with district heating areas
     intersected_geometry = gpd.overlay(
-        region.to_frame(),
+        region,
         dh_areas,
         how="intersection",
     ).union_all()
 
-    region.geometry = intersected_geometry
-
-    # Handle empty geometry case (no intersection with DH areas)
-    # This occurs when a region has no district heating area
-    # Note: the region could still have district heating, as central heat demand is computed elsewhere
-    if region.geometry.is_empty.any():
-        # Get the center of the original region (before intersection)
-        # We use the original region to get a meaningful coordinate for the empty datasets
-        # Project to EPSG:3035 for accurate centroid calculation, then back to EPSG:4326
-        region_center = (
-            original_region.to_crs("EPSG:3035").centroid.to_crs("EPSG:4326").iloc[0]
-        )
-        center_lon = region_center.x
-        center_lat = region_center.y
-
-        # Return zero-filled datasets with proper structure
-        spatial_aggregate, temporal_aggregate = _create_empty_datasets(
-            snapshots, center_lon, center_lat
-        )
-
-        return {
-            "spatial aggregate": spatial_aggregate,
-            "temporal aggregate": temporal_aggregate,
-        }
-
-    # Process region with valid DH area intersection
-    # Get bounding box for efficient data clipping
-    minx, miny, maxx, maxy = region.total_bounds
-
-    # Load and preprocess sea water temperature data
-    water_temperature = (
-        xr.open_mfdataset(
-            seawater_temperature_fn,
-            chunks={
-                "time": "auto",
-                "latitude": "auto",
-                "longitude": "auto",
-                "depth": 1,
-            },
-        )["thetao"]
-        .mean(dim="depth")
-        .rio.write_crs("EPSG:4326")
-        .rio.clip_box(minx, miny, maxx, maxy)
-        .rio.reproject("EPSG:3035")
+    region = region.copy()
+    region.geometry = gpd.GeoSeries(
+        [intersected_geometry],
+        index=region.index,
+        crs=region.crs,
     )
 
-    # Reproject region to match data CRS for spatial calculations
+    if region.geometry.is_empty.any():
+        return _empty_result_for_region(original_region, snapshots)
+
+    minx, miny, maxx, maxy = region.total_bounds
+
+    water_temperature = _load_regional_seawater_temperature(
+        seawater_temperature_fn,
+        minx,
+        miny,
+        maxx,
+        maxy,
+    )
+    if water_temperature is None:
+        return _empty_result_for_region(original_region, snapshots)
+
     region = region.to_crs("EPSG:3035")
 
     seawater_heat_approximator = SeaWaterHeatApproximator(
@@ -197,18 +244,14 @@ def get_regional_result(
         region=region,
     )
 
-    # Calculate spatial aggregate (time series data for the entire region)
-    # Contains average_temperature [°C] over time
     spatial_aggregate = seawater_heat_approximator.get_spatial_aggregate()
 
-    # Calculate temporal aggregate (spatial distribution data for plotting, no time dimension)
     temporal_aggregate = (
         seawater_heat_approximator.get_temporal_aggregate()
-        .rio.reproject("EPSG:4326")  # Convert back to WGS84 for output consistency
+        .rio.reproject("EPSG:4326")
         .rename({"x": "longitude", "y": "latitude"})
     )
 
-    # Compute results immediately to free Dask arrays
     spatial_aggregate = spatial_aggregate.compute()
     temporal_aggregate = temporal_aggregate.compute()
 
@@ -220,7 +263,7 @@ def get_regional_result(
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "build_sea_heat_potential",
@@ -236,38 +279,24 @@ if __name__ == "__main__":
     set_scenario_config(snakemake)
     update_config_from_wildcards(snakemake.config, snakemake.wildcards)
 
-    # Get simulation snapshots
     snapshots: pd.DatetimeIndex = get_snapshots(
         snakemake.params.snapshots, snakemake.params.drop_leap_day
     )
 
-    # Load geographic data for processing
-    # Load onshore regions (countries/NUTS regions) for sea water analysis
     regions_onshore = gpd.read_file(snakemake.input["regions_onshore"])
-    regions_onshore.set_index("name", inplace=True)  # Use region name as index
-    regions_onshore.set_crs("EPSG:4326", inplace=True)  # Ensure WGS84 CRS
+    regions_onshore.set_index("name", inplace=True)
+    regions_onshore.set_crs("EPSG:4326", inplace=True)
 
-    # Load and preprocess district heating areas
-    # These define where sea water heat pumps could be connected
     dh_areas = gpd.read_file(snakemake.input["dh_areas"]).to_crs("EPSG:3035")
-    # Buffer DH areas to account for reasonable transport distances
-    # This allows sea water access even if DH areas don't directly touch the coast
     dh_areas["geometry"] = dh_areas.geometry.buffer(snakemake.params.dh_area_buffer)
-    dh_areas = dh_areas.to_crs("EPSG:4326")  # Convert back to WGS84 for intersection
+    dh_areas = dh_areas.to_crs("EPSG:4326")
 
-    # Each region is processed independently to calculate its sea water temperature
     results = []
     for region_name in regions_onshore.index:
         logging.info(f"Processing region {region_name}")
 
-        # Extract region geometry and create a copy to avoid modification conflicts
-        region = gpd.GeoSeries(regions_onshore.loc[region_name].copy(deep=True))
+        region = regions_onshore.loc[[region_name]].copy(deep=True)
 
-        # Submit region processing task to Dask cluster
-        # Each task will:
-        # 1. Intersect region with DH areas (coastal access check)
-        # 2. Load and clip sea water temperature data to region bounds
-        # 3. Calculate temperature profiles using approximator
         results.append(
             get_regional_result(
                 seawater_temperature_fn=[
@@ -281,8 +310,6 @@ if __name__ == "__main__":
             )
         )
 
-    # Concatenate average temperature for all regions into single dataset
-    # This creates a 2D array: [time, regions] with sea water temperature values
     temperature = (
         xr.concat(
             [res["spatial aggregate"]["average_temperature"] for res in results],
@@ -290,16 +317,12 @@ if __name__ == "__main__":
         )
         .assign_coords(name=regions_onshore.index)
         .dropna(dim="time")
-    )  # Remove invalid time points
+    )
 
-    # Align temperature data to simulation snapshots
-    # Use "nearest" method to handle any minor timestamp differences
     temperature = temperature.sel(time=snapshots, method="nearest").assign_coords(
         time=snapshots
     )
 
-    # Save temperature profiles as NetCDF for heat pump COP calculations
-    # Units: °C (degrees Celsius) - sea water temperature for coastal heat pumps
     temperature.to_netcdf(snakemake.output.heat_source_temperature)
 
     # Temperature temporal aggregate: spatial distribution of sea water temperatures

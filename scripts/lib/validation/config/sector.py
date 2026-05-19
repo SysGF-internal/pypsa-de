@@ -28,6 +28,16 @@ class _SubnodesConfig(BaseModel):
         10,
         description="Number of largest district heating subnodes that are explicitly represented in the network.",
     )
+    demand_share: float | None = Field(
+        None,
+        description=(
+            "Cumulative district heating demand share to represent explicitly. "
+            "Values in [0, 1] are interpreted as fractions; values in (1, 100] "
+            "are interpreted as percentages. This mode currently requires "
+            "exactly one planning horizon because the selected dh_subnodes "
+            "resources are shared across planning horizons."
+        ),
+    )
     countries: list[str] = Field(
         [],
         description="List of country codes to consider for district heating subnodes. If empty, all countries are considered.",
@@ -44,6 +54,31 @@ class _SubnodesConfig(BaseModel):
         False,
         description="Scale subnode demands to match the model's district heating demand per country, using the ISI DH area data's assumed national DH shares as denominator.",
     )
+    census_areas: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "enable": False,
+            "data_file": "",
+            "min_district_heating_share": 0.01,
+            "processing": {
+                "min_area": [10000, 100000, 0, 1000000],
+                "buffer_factor": [0.01, 0.05, 0.05, 0],
+                "buffer_absolute": 0,
+            },
+        },
+        description="Optional census-based refinement of explicit district-heating subnode geometries.",
+    )
+
+    @field_validator("demand_share")
+    @classmethod
+    def validate_demand_share(cls, v: float | None) -> float | None:
+        """Accept cumulative DH demand shares as fractions or percentages."""
+        if v is None:
+            return v
+        if v < 0 or v > 100:
+            raise ValueError(
+                "demand_share must lie in [0, 1] as a fraction or in (1, 100] as a percentage"
+            )
+        return v
 
 
 class _PtesConfig(BaseModel):
@@ -100,6 +135,21 @@ class _PtesConfig(BaseModel):
         35,
         gt=0,
         description="Design bottom temperature in °C for capacity calculation.",
+    )
+    potential_limit: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "enable": False,
+            "explicit_subnodes": True,
+            "remaining_regions": True,
+            "osm_landcover_codes": [21, 23, 32, 33],
+            "excluder_resolution": 10,
+            "min_area": 10000,
+            "default_capacity_mwh": 4500,
+            "natura": True,
+            "groundwater_depth": True,
+            "max_groundwater_depth": -10,
+        },
+        description="Optional PTES energy-capacity limits derived from eligible land within district-heating areas.",
     )
 
     @field_validator("top_temperature")
@@ -214,10 +264,6 @@ class _DistrictHeatingConfig(ConfigModel):
         default_factory=lambda: {"buffer": 1000, "handle_missing_countries": "fill"},
         description="District heating areas settings.",
     )
-    fallback_ptx_heat_losses: float = Field(
-        0.05,
-        description="Default heat loss fraction for PtX processes when waste heat recovery is enabled but no specific loss value is provided.",
-    )
     ignore_missing_geothermal_data: bool = Field(
         False,
         description="If true, missing geothermal data for non-EU countries will be ignored. If false, an error will be raised if countries with missing data are modelled while geothermal heat is included as a heat source.",
@@ -268,10 +314,6 @@ class _DistrictHeatingConfig(ConfigModel):
             "``scripts/definitions/heat_source.py`` and ``add_waste_heat()`` in "
             "``scripts/prepare_sector_network.py``."
         ),
-    )
-    subnodes: _SubnodesConfig = Field(
-        default_factory=_SubnodesConfig,
-        description="Configuration options for explicit representation of largest district heating systems as subnodes.",
     )
     subnodes: _SubnodesConfig = Field(
         default_factory=_SubnodesConfig,

@@ -2978,6 +2978,7 @@ def add_heat(
     heat_source_preheater_utilisation_profile_file: str,
     hourly_heat_demand_total_file: str,
     ptes_e_max_pu_file: str,
+    ptes_potentials_file: str,
     ptes_boost_per_discharge_profile_file: str,
     ates_e_nom_max: str,
     ates_capex_as_fraction_of_geothermal_heat_source: float,
@@ -3062,6 +3063,13 @@ def add_heat(
     - Building retrofitting options if enabled
     """
     logger.info("Add heat sector")
+
+    if options["district_heating"]["ptes"]["enable"] and ptes_potentials_file:
+        ptes_potentials = pd.read_csv(ptes_potentials_file, index_col=0)[
+            "ptes_potential"
+        ]
+    else:
+        ptes_potentials = pd.Series(dtype=float, name="ptes_potential")
 
     sectors = [sector.value for sector in HeatSector]
 
@@ -3405,6 +3413,7 @@ def add_heat(
                 bus=heat_nodes + f" {heat_system} water pits",
                 e_cyclic=True,
                 e_nom_extendable=True,
+                e_nom_max=ptes_potentials.reindex(heat_nodes).fillna(np.inf),
                 e_max_pu=e_max_pu,
                 carrier=f"{heat_system} water pits",
                 standing_loss=costs.at["central water pit storage", "standing_losses"]
@@ -6748,6 +6757,7 @@ if __name__ == "__main__":
             heat_source_preheater_utilisation_profile_file=snakemake.input.heat_source_preheater_utilisation_profiles,
             hourly_heat_demand_total_file=snakemake.input.hourly_heat_demand_total,
             ptes_e_max_pu_file=snakemake.input.ptes_e_max_pu_profiles,
+            ptes_potentials_file=snakemake.input.ptes_potentials,
             ates_e_nom_max=snakemake.input.ates_potentials,
             ates_capex_as_fraction_of_geothermal_heat_source=snakemake.params.sector[
                 "district_heating"

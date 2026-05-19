@@ -4250,6 +4250,19 @@
                   "description": "Number of largest district heating subnodes that are explicitly represented in the network.",
                   "type": "integer"
                 },
+                "demand_share": {
+                  "default": null,
+                  "description": "Cumulative district heating demand share to represent explicitly. Values in [0, 1] are interpreted as fractions; values in (1, 100] are interpreted as percentages. This mode currently requires exactly one planning horizon because the selected dh_subnodes resources are shared across planning horizons.",
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "countries": {
                   "default": [],
                   "description": "List of country codes to consider for district heating subnodes. If empty, all countries are considered.",
@@ -4267,13 +4280,18 @@
                   "default": "Label",
                   "description": "Name of the column in the single-system level data to use for subnode labels.",
                   "type": "string"
-              },
-              "use_isi_data_assumptions": {
-                "default": false,
-                "description": "If true, scale subnode demands to match the model's DH demand using ISI data assumptions as denominator.",
-                "type": "boolean"
+                },
+                "use_isi_data_assumptions": {
+                  "default": false,
+                  "description": "If true, scale subnode demands to match the model's DH demand using ISI data assumptions as denominator.",
+                  "type": "boolean"
+                }
               }
-              }
+            },
+            "ignore_missing_geothermal_data": {
+              "default": false,
+              "description": "If true, missing geothermal data for non-EU countries is ignored. If false, the workflow raises an error when geothermal heat is enabled for countries without available geothermal source data.",
+              "type": "boolean"
             }
           }
         },
