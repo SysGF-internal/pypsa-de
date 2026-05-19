@@ -28,6 +28,16 @@ class _SubnodesConfig(BaseModel):
         10,
         description="Number of largest district heating subnodes that are explicitly represented in the network.",
     )
+    demand_share: float | None = Field(
+        None,
+        description=(
+            "Cumulative district heating demand share to represent explicitly. "
+            "Values in [0, 1] are interpreted as fractions; values in (1, 100] "
+            "are interpreted as percentages. This mode currently requires "
+            "exactly one planning horizon because the selected dh_subnodes "
+            "resources are shared across planning horizons."
+        ),
+    )
     countries: list[str] = Field(
         [],
         description="List of country codes to consider for district heating subnodes. If empty, all countries are considered.",
@@ -57,6 +67,18 @@ class _SubnodesConfig(BaseModel):
         },
         description="Optional census-based refinement of explicit district-heating subnode geometries.",
     )
+
+    @field_validator("demand_share")
+    @classmethod
+    def validate_demand_share(cls, v: float | None) -> float | None:
+        """Accept cumulative DH demand shares as fractions or percentages."""
+        if v is None:
+            return v
+        if v < 0 or v > 100:
+            raise ValueError(
+                "demand_share must lie in [0, 1] as a fraction or in (1, 100] as a percentage"
+            )
+        return v
 
 
 class _PtesConfig(BaseModel):
@@ -242,10 +264,6 @@ class _DistrictHeatingConfig(ConfigModel):
         default_factory=lambda: {"buffer": 1000, "handle_missing_countries": "fill"},
         description="District heating areas settings.",
     )
-    fallback_ptx_heat_losses: float = Field(
-        0.05,
-        description="Default heat loss fraction for PtX processes when waste heat recovery is enabled but no specific loss value is provided.",
-    )
     ignore_missing_geothermal_data: bool = Field(
         False,
         description="If true, missing geothermal data for non-EU countries will be ignored. If false, an error will be raised if countries with missing data are modelled while geothermal heat is included as a heat source.",
@@ -296,10 +314,6 @@ class _DistrictHeatingConfig(ConfigModel):
             "``scripts/definitions/heat_source.py`` and ``add_waste_heat()`` in "
             "``scripts/prepare_sector_network.py``."
         ),
-    )
-    subnodes: _SubnodesConfig = Field(
-        default_factory=_SubnodesConfig,
-        description="Configuration options for explicit representation of largest district heating systems as subnodes.",
     )
     subnodes: _SubnodesConfig = Field(
         default_factory=_SubnodesConfig,

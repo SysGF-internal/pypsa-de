@@ -130,6 +130,7 @@ sector:
     subnodes:
       enable: true
       n_subnodes: 40
+      demand_share: null
       countries: []
       demand_column: Dem_GWh
       label_column: Label
@@ -142,6 +143,7 @@ sector:
           min_area: [10000, 100000, 0, 1000000]
           buffer_factor: [0.01, 0.05, 0.05, 0]
           buffer_absolute: 5
+    ignore_missing_geothermal_data: true
     limited_heat_sources:
       geothermal:
         ignore_missing_regions: true
@@ -269,4 +271,3 @@ pypsa-de:
         - urban central haber-bosch excess heat
         - urban central sabatier excess heat
         - urban central methanolisation excess heat
-

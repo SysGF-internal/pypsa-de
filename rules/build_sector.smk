@@ -11,6 +11,30 @@ def input_regions_onshore_district_heating(w):
         return resources("regions_onshore_base_s_{clusters}.geojson")
 
 
+def district_heating_subnode_demand_share_enabled(w):
+    demand_share = config_provider(
+        "sector", "district_heating", "subnodes", "demand_share"
+    )(w)
+    return demand_share is not None and not (
+        isinstance(demand_share, str) and demand_share.strip() == ""
+    )
+
+
+def district_heating_subnode_selection_planning_horizon(w):
+    planning_horizons = config_provider("scenario", "planning_horizons")(w)
+    if not isinstance(planning_horizons, list):
+        planning_horizons = [planning_horizons]
+    if len(planning_horizons) != 1:
+        raise ValueError(
+            "District heating subnode demand_share requires exactly one planning horizon because dh_subnodes resources are shared across planning horizons."
+        )
+    return planning_horizons[0]
+
+
+def scenario_resource(fn):
+    return f"resources/{RDIR}{fn}"
+
+
 rule build_population_layouts:
     message:
         "Building population layout data (total, urban, rural) from NUTS3 shapes and World Bank statistics"
@@ -765,7 +789,7 @@ rule build_sea_heat_potential:
             "temp_sea_water_base_s_{clusters}_temporal_aggregate.nc"
         ),
     resources:
-        mem_mb=10000,
+        mem_mb=100000,
     log:
         logs("build_sea_water_heat_potential_base_s_{clusters}.log"),
     benchmark:
@@ -1656,6 +1680,24 @@ rule build_district_heating_subnodes:
         n_subnodes=config_provider(
             "sector", "district_heating", "subnodes", "n_subnodes"
         ),
+        demand_share=config_provider(
+            "sector", "district_heating", "subnodes", "demand_share"
+        ),
+        district_heating_loss=config_provider(
+            "sector", "district_heating", "district_heating_loss"
+        ),
+        reduce_space_heat_exogenously=config_provider(
+            "sector", "reduce_space_heat_exogenously"
+        ),
+        reduce_space_heat_exogenously_factor=config_provider(
+            "sector", "reduce_space_heat_exogenously_factor"
+        ),
+        energy_totals_year=config_provider("energy", "energy_totals_year"),
+        selection_planning_horizon=lambda w: (
+            district_heating_subnode_selection_planning_horizon(w)
+            if district_heating_subnode_demand_share_enabled(w)
+            else None
+        ),
         demand_column=config_provider(
             "sector", "district_heating", "subnodes", "demand_column"
         ),
@@ -1669,6 +1711,35 @@ rule build_district_heating_subnodes:
         dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
         regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
         dh_city_lookup=resources("dh_city_lookup.csv"),
+        district_heat_share_selection=lambda w: (
+            scenario_resource(
+                f"district_heat_share_base_s_{w.clusters}_{district_heating_subnode_selection_planning_horizon(w)}.csv"
+            )
+            if district_heating_subnode_demand_share_enabled(w)
+            else []
+        ),
+        pop_weighted_energy_totals_selection=lambda w: (
+            resources("pop_weighted_energy_totals_s_{clusters}.csv")
+            if district_heating_subnode_demand_share_enabled(w)
+            else []
+        ),
+        pop_weighted_heat_totals_selection=lambda w: (
+            resources("pop_weighted_heat_totals_s_{clusters}.csv")
+            if district_heating_subnode_demand_share_enabled(w)
+            else []
+        ),
+        heating_efficiencies_selection=lambda w: (
+            resources("heating_efficiencies.csv")
+            if district_heating_subnode_demand_share_enabled(w)
+            else []
+        ),
+        industrial_demand_selection=lambda w: (
+            scenario_resource(
+                f"industrial_energy_demand_base_s_{w.clusters}_{district_heating_subnode_selection_planning_horizon(w)}.csv"
+            )
+            if district_heating_subnode_demand_share_enabled(w)
+            else []
+        ),
         census=lambda w: (
             config_provider(
                 "sector",

@@ -702,6 +702,7 @@ sector:
     subnodes:
       enable: false
       n_subnodes: 10
+      demand_share: null
       countries: []
       demand_column: Dem_GWh
       label_column: Label
