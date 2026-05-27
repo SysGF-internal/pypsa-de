@@ -26,6 +26,15 @@ Tip: You can also set up automatic shell activation in several popular editors (
 
 If you cannot access pixi on your machine, you can also install using `conda`. For more details see the corresponding section in the [documentation](https://pypsa-eur.readthedocs.io/en/latest/installation.html#legacy-method-conda) of PyPSA-Eur
 
+### Copernicus Marine credentials
+
+Retrieving sea water temperature data requires a free [Copernicus Marine Service](https://marine.copernicus.eu/) account. Set your credentials as environment variables before running the workflow (e.g. in `~/.bashrc`):
+
+```bash
+export COPERNICUSMARINE_USERNAME=your_username
+export COPERNICUSMARINE_PASSWORD=your_password
+```
+
 ## Run the analysis
 
 Before running any analysis with scenarios, the rule `build_scenarios` must be executed. This will create the file `config/scenarios.automated.yaml` which includes input data and CO2 targets from the IIASA Ariadne database as well as the specifications from the manual scenario file. [This file is specified in the  config.de.yaml via they key `run:scenarios:manual_file` and located at `config/scenarios.manual.yaml` by default].

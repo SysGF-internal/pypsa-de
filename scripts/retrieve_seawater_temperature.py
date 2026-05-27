@@ -90,26 +90,35 @@ if __name__ == "__main__":
             f"Downloading seawater temperature data for year {snakemake.wildcards.year}"
         )
 
+        username = os.environ.get("COPERNICUSMARINE_USERNAME")
+        password = os.environ.get("COPERNICUSMARINE_PASSWORD")
+        if not username or not password:
+            raise EnvironmentError(
+                "Copernicus Marine credentials not found. "
+                "Set COPERNICUSMARINE_USERNAME and COPERNICUSMARINE_PASSWORD "
+                "in your environment (e.g. in ~/.bashrc)."
+            )
+
         _ = copernicusmarine.subset(
-            dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",  # Global ocean physics reanalysis
+            dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
             start_datetime=f"{snakemake.wildcards.year}-01-01",
             end_datetime=f"{int(snakemake.wildcards.year)}-12-31",
-            minimum_longitude=-12,  # Western European boundary
-            maximum_longitude=42,  # Eastern European boundary
-            minimum_latitude=33,  # Southern European boundary
-            maximum_latitude=72,  # Northern European boundary
-            variables=["thetao"],  # Potential temperature [°C]
-            minimum_depth=5,  # Near-surface depth for heat pumps [m]
-            maximum_depth=15,  # Near-surface depth for heat pumps [m]
+            minimum_longitude=-12,
+            maximum_longitude=42,
+            minimum_latitude=33,
+            maximum_latitude=72,
+            variables=["thetao"],
+            minimum_depth=5,
+            maximum_depth=15,
             output_filename=snakemake.output.seawater_temperature,
+            username=username,
+            password=password,
         )
 
-        # Verify successful download
         if not os.path.exists(snakemake.output.seawater_temperature):
             raise FileNotFoundError(
-                f"Failed to retrieve seawater temperature data and save to {snakemake.output.seawater_temperature}. "
-                f"One reason might be missing Copernicus Marine login info. "
-                f"See the copernicusmarine package documentation for details."
+                f"Failed to save seawater temperature data to "
+                f"{snakemake.output.seawater_temperature}."
             )
 
         logger.info(
