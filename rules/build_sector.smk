@@ -890,7 +890,7 @@ rule build_eurostat_balances:
         csv=resources("eurostat_energy_balances.csv"),
     threads: 1
     resources:
-        mem_mb=4000,
+        mem_mb=16000,
     log:
         logs("build_eurostat_balances.log"),
     benchmark:
@@ -1194,7 +1194,7 @@ rule build_industrial_production_per_country:
         ),
     threads: 8
     resources:
-        mem_mb=2000,
+        mem_mb=8000,
     log:
         logs("build_industrial_production_per_country.log"),
     benchmark:
