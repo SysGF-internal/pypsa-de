@@ -1514,6 +1514,11 @@ if (LAU_REGIONS_DATASET := dataset_version("lau_regions"))["source"] in [
         run:
             copy2(input["lau_regions"], output["zip"])
 
+    if dataset_version("seawater_temperature")["source"] == "primary":
+        envvars:
+            "COPERNICUSMARINE_USERNAME",
+            "COPERNICUSMARINE_PASSWORD",
+
     rule retrieve_seawater_temperature:
         message:
             "Retrieving seawater temperature data for {wildcards.year}"
@@ -1736,10 +1741,8 @@ if (LAKE_DATA_DATASET := dataset_version("lake_data"))["source"] in [
         output:
             zip_file=f"{LAKE_DATA_DATASET['folder']}/HydroLAKES_polys_v10.gdb.zip",
             lake_data=directory(
-                f"{LAKE_DATA_DATASET['folder']}/HydroLAKES_polys_v10.gdb/HydroLAKES_polys_v10.gdb/HydroLAKES_polys_v10.gdb"
+                f"{LAKE_DATA_DATASET['folder']}/HydroLAKES_polys_v10.gdb"
             ),
         run:
             copy2(input["zip_file"], output["zip_file"])
-            unpack_archive(
-                output["zip_file"],
-            )
+            unpack_archive(output["zip_file"], Path(output["zip_file"]).parent)

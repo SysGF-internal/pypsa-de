@@ -306,7 +306,18 @@ def distribute_n_clusters_to_countries(
     )
 
     if isinstance(focus_weights, dict):
-        total_focus = sum(list(focus_weights.values()))
+        network_countries = set(L.index.get_level_values("country"))
+        missing = set(focus_weights) - network_countries
+        if missing:
+            logger.warning(
+                "focus_weights contains countries not in the network and will be "
+                f"ignored: {sorted(missing)}. Renormalizing remaining weights."
+            )
+            focus_weights = {
+                c: w for c, w in focus_weights.items() if c in network_countries
+            }
+
+        total_focus = sum(focus_weights.values())
 
         assert total_focus <= 1.0, (
             "The sum of focus weights must be less than or equal to 1."
@@ -318,7 +329,11 @@ def distribute_n_clusters_to_countries(
         remainder = [
             c not in focus_weights.keys() for c in L.index.get_level_values("country")
         ]
-        L[remainder] = L.loc[remainder].pipe(normed) * (1 - total_focus)
+        if any(remainder):
+            L[remainder] = L.loc[remainder].pipe(normed) * (1 - total_focus)
+        else:
+            # All active countries carry a focus weight; renormalize so L sums to 1.
+            L = L.pipe(normed)
 
         logger.warning("Using custom focus weights for determining number of clusters.")
 
