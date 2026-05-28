@@ -44,6 +44,13 @@ Outputs
 
 import gc
 import logging
+import sys
+
+from pathlib import Path
+
+# _helpers.py lives in the parent scripts/ directory; Snakemake 9 only adds the
+# script's own subdirectory to sys.path, so we add the parent explicitly.
+sys.path.insert(0, str(Path(snakemake.scriptdir).parent))  # noqa: F821
 
 import dask
 import geopandas as gpd
