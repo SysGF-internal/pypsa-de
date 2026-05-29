@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../schema.default.json
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
+#
+# SPDX-License-Identifier: CC0-1.0
+
+# Minimal layered-PTES equivalence bench: DE, 1 cluster, 7H sector resolution,
+# full-year 2013 snapshots (PTES is a seasonal store, so the whole year must be
+# exercised). Used to produce the Phase-0 reference network on
+# `layered-ptes-energy-exact` and to validate `fix-feat-layered-ptes-model`
+# against it in Phase 2. `conservative_return_layer` is deliberately left unset
+# so this config validates on both branches.
+
+run:
+  name: "test-layered-ptes-minimal"
+  disable_progressbar: true
+  shared_resources:
+    policy: false
+
+scenario:
+  clusters:
+  - 1
+  sector_opts:
+  - ''
+  planning_horizons:
+  - 2030
+
+countries: ['DE']
+
+clustering:
+  temporal:
+    resolution_sector: 7H
+
+sector:
+  district_heating:
+    ptes:
+      enable: true
+      layered:
+        layer_temperatures: [90, 62.5, 35]
+  heat_sources:
+    urban central:
+    - air
+    - ptes
+    urban decentral:
+    - air
+    rural:
+    - air
+
+solving:
+  solver:
+    name: highs
+    options: highs-default
+  mem: 4000
+
+  check_objective:
+    enable: false
