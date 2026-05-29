@@ -262,12 +262,28 @@ def expand_heat_sources_for_ptes_layers(
     heat_sources_by_system: dict[str, list[str]],
     ptes_layer_temperatures: list[float] | None,
 ) -> dict[str, list[str]]:
-    """Replace 'ptes' by per-layer labels when multiple PTES layers exist."""
+    """
+    Replace ``'ptes'`` by per-layer ``ptes layer {l}`` labels when multiple PTES
+    layers exist (the per-layer heat-source COP). A single layer keeps the plain
+    ``'ptes'`` source unchanged. The input mapping is not mutated.
 
-    for layer in range(len(ptes_layer_temperatures)):
-        heat_sources_by_system["urban central"].append(f"ptes layer {layer}")
+    The booster heat-pump COP is no longer built here: it is computed inside
+    ``PtesApproximator`` (build_ptes_operations), where the discrete deposit layer
+    is known, so the COP source-outlet matches the layer the volume lands in.
+    """
+    num_layers = len(ptes_layer_temperatures)
+    if num_layers <= 1:
+        return heat_sources_by_system
 
-    return heat_sources_by_system
+    layer_sources = [f"ptes layer {layer}" for layer in range(num_layers)]
+    return {
+        system: [
+            source
+            for entry in sources
+            for source in (layer_sources if entry == "ptes" else [entry])
+        ]
+        for system, sources in heat_sources_by_system.items()
+    }
 
 
 if __name__ == "__main__":

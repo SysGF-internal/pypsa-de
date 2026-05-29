@@ -79,11 +79,14 @@ if __name__ == "__main__":
         forward_temperature=forward_temperature,
         return_temperature=return_temperature,
         layer_temperatures=snakemake.params.layer_temperatures,
+        top_temperature=snakemake.params.top_temperature,
+        bottom_temperature=snakemake.params.bottom_temperature,
         design_top_temperature=snakemake.params.design_top_temperature,
         design_bottom_temperature=snakemake.params.design_bottom_temperature,
         design_standing_losses=0.0,  # placeholder; actual value set from costs data
         interlayer_heat_transfer_coefficient=snakemake.params.interlayer_heat_transfer_coefficient,
-        cop=xr.open_dataarray(snakemake.input.cop_profiles),
+        cop_approximation_params=snakemake.params.heat_pump_cop_approximation,
+        booster_source_dt=snakemake.params.booster_source_dt,
     )
 
     # Write single dataset with all pre-computed PTES parameters

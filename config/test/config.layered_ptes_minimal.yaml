@@ -35,6 +35,7 @@ sector:
     ptes:
       enable: true
       layered:
+        enable: true
         layer_temperatures: [90, 62.5, 35]
   heat_sources:
     urban central:

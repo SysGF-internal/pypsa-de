@@ -3087,10 +3087,6 @@ def add_heat(
             heat_system == HeatSystem.URBAN_CENTRAL
             and options["district_heating"]["ptes"]["enable"]
         ):
-            n.add("Carrier", f"{heat_system} water pits")
-            n.add("Carrier", f"{heat_system} ptes preheater")
-            n.add("Carrier", f"{heat_system} ptes hp input")
-
             ptes_ds = xr.open_dataset(ptes_operations_file)
             num_layers = int(ptes_ds.attrs["num_layers"])
 
@@ -3099,216 +3095,233 @@ def add_heat(
             ]
             e_max_pu = float(ptes_ds["e_max_pu"])
 
-            # return_layer_by_node = ptes_ds["return_layer_index"].to_pandas().astype(int)
-            # return_temperature_layer = pd.Series(
-            #     [
-            #         f"{node} {heat_system} water pits"
-            #         + (f" layer {layer_idx}" if num_layers > 1 else "")
-            #         for node, layer_idx in return_layer_by_node.items()
-            #     ],
-            #     index=return_layer_by_node.index,
-            # ).reindex(nodes)
+            n.add("Carrier", f"{heat_system} water pits")
 
-            for layer in range(num_layers):
-                layer_suffix = f" layer {layer}" if num_layers > 1 else ""
+            if num_layers >= 3:
+                # ============================================================
+                # Layered volume model (>= 3 layers): per-layer m3 stores,
+                # volume-trade chargers, a discharger multilink and a booster HP
+                # per layer. All per-link efficiencies are pre-computed in
+                # PtesApproximator -- this block only wires components.
+                # ============================================================
+                # Volume transits the discharger -> booster-HP chain on this bus.
+                n.add("Carrier", f"{heat_system} ptes hp source")
 
-                preheater_efficiency = ptes_ds["preheater_efficiency"].sel(layer=layer)
+                for layer in range(num_layers):
+                    layer_suffix = f" layer {layer}"
 
-                charger_efficiency = (
-                    ptes_ds["charger_efficiency"].sel(layer=layer).to_pandas()
-                )
-
-                n.add(
-                    "Bus",
-                    nodes + f" {heat_system} water pits{layer_suffix}",
-                    location=nodes,
-                    carrier=f"{heat_system} water pits",
-                    unit="m3",
-                )
-
-                n.add(
-                    "Bus",
-                    nodes + f" {heat_system} ptes preheater{layer_suffix}",
-                    location=nodes,
-                    carrier=f"{heat_system} ptes preheater",
-                    unit="m3",
-                )
-
-                n.add(
-                    "Bus",
-                    nodes + f" {heat_system} ptes hp input{layer_suffix}",
-                    location=nodes,
-                    carrier=f"{heat_system} ptes hp input",
-                    unit="m3",
-                )
-
-                n.add(
-                    "Link",
-                    nodes,
-                    suffix=f" {heat_system} water pits charger{layer_suffix}",
-                    bus0=nodes + f" {heat_system} heat",
-                    bus1=nodes + f" {heat_system} water pits{layer_suffix}",
-                    efficiency=charger_efficiency,
-                    carrier=f"{heat_system} water pits charger{layer_suffix}",
-                    p_nom_extendable=True,
-                    lifetime=costs.at["central water pit storage", "lifetime"],
-                    marginal_cost=costs.at[
-                        "central water pit charger", "marginal_cost"
-                    ],
-                    p_max_pu=ptes_ds["charging_availability"]
-                    .sel(layer=layer)
-                    .to_pandas(),
-                )
-
-                n.add(
-                    "Link",
-                    nodes,
-                    suffix=f" {heat_system} water pits discharger{layer_suffix}",
-                    bus0=nodes + f" {heat_system} water pits{layer_suffix}",
-                    bus1=nodes + f" {heat_system} ptes preheater{layer_suffix}",
-                    carrier=f"{heat_system} water pits discharger{layer_suffix}",
-                    efficiency=1,
-                    marginal_cost=costs.at[
-                        "central water pit discharger", "marginal_cost"
-                    ],
-                    p_nom_extendable=True,
-                    p_max_pu=0 if layer == num_layers - 1 else 1,
-                    lifetime=costs.at["central water pit storage", "lifetime"],
-                )
-
-                needs_boosting = ptes_ds["layer_needs_boosting"].sel(layer=layer)
-
-                preheater_return_layer = (
-                    nodes
-                    + f" {heat_system} water pits layer "
-                    + ptes_ds["preheater_return_layer"]
-                    .sel(layer=layer)
-                    .to_pandas()
-                    .astype(int)
-                    .astype(str)
-                )
-
-                n.add(
-                    "Link",
-                    nodes,
-                    suffix=f" {heat_system} ptes preheater{layer_suffix}",
-                    bus0=nodes + f" {heat_system} ptes preheater{layer_suffix}",
-                    bus1=nodes + f" {heat_system} heat",
-                    bus2=nodes + f" {heat_system} ptes hp input{layer_suffix}",
-                    bus3=preheater_return_layer,
-                    efficiency=preheater_efficiency.to_pandas(),
-                    efficiency2=needs_boosting.to_pandas(),
-                    efficiency3=(1 - needs_boosting).to_pandas(),
-                    p_nom_extendable=True,
-                    carrier=f"{heat_system} ptes preheater{layer_suffix}",
-                )
-
-                heat_source = HeatSource(f"ptes{layer_suffix}")
-                cop_heat_pump = (
-                    cop.sel(
-                        heat_system=heat_system.system_type.value,
-                        heat_source=heat_source.value,
-                        name=nodes,
-                    )
-                    .transpose("time", "name")
-                    .to_pandas()
-                    .clip(lower=0.001)
-                )
-
-                heat_pump_efficiency = (
-                    ptes_ds["heat_pump_efficiency"]
-                    .sel(layer=layer)
-                    .transpose("time", "name")
-                    .to_pandas()
-                    .clip(lower=0.001)
-                )
-
-                hp_return_layer = (
-                    nodes
-                    + f" {heat_system} water pits layer "
-                    + ptes_ds["hp_return_layer"]
-                    .sel(layer=layer)
-                    .to_pandas()
-                    .astype(int)
-                    .astype(str)
-                )
-                n.add(
-                    "Link",
-                    nodes,
-                    suffix=f" {heat_system} {heat_source} heat pump",
-                    bus0=nodes + f" {heat_system} heat",
-                    bus1=nodes,
-                    bus2=nodes + f" {heat_system} ptes hp input{layer_suffix}",
-                    bus3=hp_return_layer,
-                    efficiency=1 / cop_heat_pump,
-                    efficiency2=1 / heat_pump_efficiency,
-                    efficiency3=-1 / heat_pump_efficiency,
-                    capital_cost=0,
-                    p_min_pu=-needs_boosting.to_pandas(),
-                    p_max_pu=0,
-                    p_nom_extendable=True,
-                    carrier=f"{heat_system} {heat_source} heat pump",
-                )
-
-                n.links.loc[
-                    nodes + f" {heat_system} water pits charger{layer_suffix}",
-                    "energy to power ratio",
-                ] = energy_to_power_ratio_water_pit
-                n.add(
-                    "Store",
-                    nodes,
-                    suffix=f" {heat_system} water pits{layer_suffix}",
-                    bus=nodes + f" {heat_system} water pits{layer_suffix}",
-                    e_initial=0,
-                    e_nom_extendable=True,
-                    carrier=f"{heat_system} water pits{layer_suffix}",
-                    standing_loss=costs.at[
-                        "central water pit storage", "standing_losses"
-                    ]
-                    / 100,
-                )
-
-                # Inter-layer links: bidirectional flow between adjacent layers
-                if layer < num_layers - 1:
-                    lower_layer = f" layer {layer + 1}"
                     n.add(
-                        "Link",
-                        nodes,
-                        suffix=f" {heat_system} water pits inter{layer_suffix}-{lower_layer}",
-                        bus0=nodes + f" {heat_system} water pits{layer_suffix}",
-                        bus1=nodes + f" {heat_system} water pits{lower_layer}",
-                        carrier=f"{heat_system} water pits interlayer",
-                        p_nom_extendable=True,
+                        "Bus",
+                        nodes + f" {heat_system} water pits{layer_suffix}",
+                        location=nodes,
+                        carrier=f"{heat_system} water pits",
+                        unit="m3",
                     )
 
-                n.add(
-                    "Generator",
-                    nodes + f" {heat_system} ptes{layer_suffix} vent",
-                    bus=nodes + f" {heat_system} water pits{layer_suffix}",
-                    location=nodes,
-                    carrier=f"{heat_system} water pits",
-                    unit="m3",
-                    p_max_pu=0,
-                    p_min_pu=-1,
-                    marginal_cost=-1,
-                    p_nom_extendable=True,
-                )
-            if layer == num_layers - 1:
-                n.add(
-                    "Generator",
-                    nodes + f" {heat_system} ptes bottom layer water",
-                    bus=nodes + f" {heat_system} water pits{layer_suffix}",
-                    location=nodes,
-                    carrier=f"{heat_system} water pits",
-                    unit="m3",
-                    p_max_pu=1,
-                    p_min_pu=0,
-                    marginal_cost=1,
-                    p_nom_extendable=True,
-                )
+                    # --- Volume-trade chargers ---
+                    # One charger per (destination = this layer, source) pair: 1 m3
+                    # is raised from a colder source layer up to this hotter layer,
+                    # drawing rho*c_p*(T_dest - T_source) of DH heat. Mass-conserving
+                    # (efficiency2 = -efficiency) and net-energy-exact. Emitted only
+                    # for nodes where this (dest, source) pair is valid;
+                    # charging_availability then gates, per snapshot, which
+                    # destination charges.
+                    availability = (
+                        ptes_ds["charging_availability"]
+                        .sel(layer=layer)
+                        .transpose("time", "name")
+                        .to_pandas()
+                        .reindex(columns=nodes)
+                        .astype(float)
+                        .fillna(0.0)
+                    )
+                    for source in range(num_layers):
+                        valid = (
+                            ptes_ds["charger_validity"]
+                            .sel(layer_dest=layer, layer_source=source)
+                            .to_pandas()
+                            .reindex(nodes)
+                            .fillna(False)
+                        )
+                        valid_nodes = nodes[valid.to_numpy()]
+                        if valid_nodes.empty:
+                            continue
+                        charger_efficiency = float(
+                            ptes_ds["charger_efficiency_by_source"].sel(
+                                layer_dest=layer, layer_source=source
+                            )
+                        )
+                        charger_name = (
+                            valid_nodes
+                            + f" {heat_system} water pits charger{layer_suffix} from layer {source}"
+                        )
+                        n.add(
+                            "Link",
+                            valid_nodes,
+                            suffix=f" {heat_system} water pits charger{layer_suffix} from layer {source}",
+                            bus0=valid_nodes + f" {heat_system} heat",
+                            bus1=valid_nodes
+                            + f" {heat_system} water pits{layer_suffix}",
+                            bus2=valid_nodes
+                            + f" {heat_system} water pits layer {source}",
+                            efficiency=charger_efficiency,
+                            efficiency2=-charger_efficiency,
+                            carrier=f"{heat_system} water pits charger{layer_suffix}",
+                            p_nom_extendable=True,
+                            lifetime=costs.at["central water pit storage", "lifetime"],
+                            marginal_cost=costs.at[
+                                "central water pit charger", "marginal_cost"
+                            ],
+                            p_max_pu=availability[valid_nodes],
+                        )
+                        n.links.loc[charger_name, "energy to power ratio"] = (
+                            energy_to_power_ratio_water_pit
+                        )
 
-            if num_layers > 1:
-                # Main bus for the aggregate Store
+                    # The discharge chain (discharger + booster HP) only exists for
+                    # non-bottom layers: the coldest layer has nothing colder to
+                    # deposit into, so it acts purely as a charge source / deposit
+                    # target and is never discharged.
+                    if layer < num_layers - 1:
+                        # Volume transit bus feeding the booster heat pump (m3).
+                        n.add(
+                            "Bus",
+                            nodes + f" {heat_system} ptes hp source{layer_suffix}",
+                            location=nodes,
+                            carrier=f"{heat_system} ptes hp source",
+                            unit="m3",
+                        )
+
+                        # --- Discharger multilink (folds discharger + preheater) ---
+                        # Draws 1 m3 from this layer, delivers the direct (above-
+                        # return) heat to DH, and routes the volume either to the
+                        # return-level layer (no boost) or to the hp-source bus
+                        # (boost). Volume conserved per m3: efficiency2 + efficiency3
+                        # = 1.
+                        needs_boosting = (
+                            ptes_ds["layer_needs_boosting"]
+                            .sel(layer=layer)
+                            .transpose("time", "name")
+                            .to_pandas()
+                            .reindex(columns=nodes)
+                        )
+                        discharger_heat_efficiency = (
+                            ptes_ds["discharger_heat_efficiency"]
+                            .sel(layer=layer)
+                            .to_pandas()
+                            .reindex(nodes)
+                        )
+                        return_layer_bus = (
+                            nodes
+                            + f" {heat_system} water pits layer "
+                            + ptes_ds["preheater_return_layer"]
+                            .sel(layer=layer)
+                            .to_pandas()
+                            .astype(int)
+                            .astype(str)
+                            .reindex(nodes)
+                        )
+                        n.add(
+                            "Link",
+                            nodes,
+                            suffix=f" {heat_system} water pits discharger{layer_suffix}",
+                            bus0=nodes + f" {heat_system} water pits{layer_suffix}",
+                            bus1=nodes + f" {heat_system} heat",
+                            bus2=return_layer_bus,
+                            bus3=nodes + f" {heat_system} ptes hp source{layer_suffix}",
+                            efficiency=discharger_heat_efficiency,
+                            efficiency2=1.0 - needs_boosting,
+                            efficiency3=needs_boosting,
+                            carrier=f"{heat_system} water pits discharger{layer_suffix}",
+                            marginal_cost=costs.at[
+                                "central water pit discharger", "marginal_cost"
+                            ],
+                            p_nom_extendable=True,
+                            lifetime=costs.at["central water pit storage", "lifetime"],
+                        )
+
+                        # --- Booster heat pump (single link, bus0 = UCH heat) ---
+                        # Reversed-flow HP (p <= 0): delivers q_out heat to DH on
+                        # bus0, drawing electricity (bus1) and the boosted volume off
+                        # the hp-source bus (bus2), depositing the same volume at the
+                        # (colder) hp-return layer (bus3). bus0 = heat keeps p_nom in
+                        # MW_th. Electricity MUST be bus1 (the distribution-grid
+                        # rewiring appends " low voltage" to bus1 of any "heat pump"
+                        # carrier). Per unit q_out: elec = 1/COP; volume drawn =
+                        # (COP-1)/(COP*E_hp); volume conserved so bus3 = -bus2.
+                        booster_elec_efficiency = (
+                            ptes_ds["booster_elec_efficiency"]  # 1 / COP
+                            .sel(layer=layer)
+                            .transpose("time", "name")
+                            .to_pandas()
+                            .reindex(columns=nodes)
+                        )
+                        booster_volume_efficiency = (
+                            ptes_ds["booster_volume_efficiency"]  # (COP-1)/(COP*E_hp)
+                            .sel(layer=layer)
+                            .transpose("time", "name")
+                            .to_pandas()
+                            .reindex(columns=nodes)
+                        )
+                        hp_return_layer_bus = (
+                            nodes
+                            + f" {heat_system} water pits layer "
+                            + ptes_ds["hp_return_layer"]
+                            .sel(layer=layer)
+                            .to_pandas()
+                            .astype(int)
+                            .astype(str)
+                            .reindex(nodes)
+                        )
+                        n.add(
+                            "Link",
+                            nodes,
+                            suffix=f" {heat_system} ptes{layer_suffix} heat pump",
+                            bus0=nodes + f" {heat_system} heat",
+                            bus1=nodes,
+                            bus2=nodes + f" {heat_system} ptes hp source{layer_suffix}",
+                            bus3=hp_return_layer_bus,
+                            efficiency=booster_elec_efficiency,
+                            efficiency2=booster_volume_efficiency,
+                            efficiency3=-booster_volume_efficiency,
+                            capital_cost=0,
+                            p_max_pu=0,
+                            p_min_pu=-1,
+                            p_nom_extendable=True,
+                            carrier=f"{heat_system} ptes{layer_suffix} heat pump",
+                        )
+
+                    # Per-layer volume store. The mass-conserving volume-trade
+                    # charger keeps the PyPSA standing loss at 0; the standing loss
+                    # is carried by the interlayer-flow constraint in solve_network.
+                    n.add(
+                        "Store",
+                        nodes,
+                        suffix=f" {heat_system} water pits{layer_suffix}",
+                        bus=nodes + f" {heat_system} water pits{layer_suffix}",
+                        e_initial=0,
+                        e_nom_extendable=True,
+                        e_cyclic=True,
+                        carrier=f"{heat_system} water pits{layer_suffix}",
+                        standing_loss=0.0,
+                    )
+
+                    # Inter-layer links: bidirectional flow between adjacent layers.
+                    if layer < num_layers - 1:
+                        lower_layer = f" layer {layer + 1}"
+                        n.add(
+                            "Link",
+                            nodes,
+                            suffix=f" {heat_system} water pits inter{layer_suffix}-{lower_layer}",
+                            bus0=nodes + f" {heat_system} water pits{layer_suffix}",
+                            bus1=nodes + f" {heat_system} water pits{lower_layer}",
+                            carrier=f"{heat_system} water pits interlayer",
+                            p_nom_extendable=True,
+                        )
+
+                # Aggregate store: carries the PTES energy capacity (MWh) and its
+                # capital cost; the per-layer volume SOC is tied to it in
+                # solve_network.
                 n.add(
                     "Bus",
                     nodes + f" {heat_system} water pits",
@@ -3316,7 +3329,6 @@ def add_heat(
                     carrier=f"{heat_system} water pits",
                     unit="m3",
                 )
-
                 n.add(
                     "Store",
                     nodes,
@@ -3334,11 +3346,11 @@ def add_heat(
                     lifetime=costs.at["central water pit storage", "lifetime"],
                 )
 
-                # Dummy HP: single extendable link that carries all layer-HP investment
-                # cost. Layer HPs have capital_cost=0; the capacity constraint in
-                # solve_network ties sum_l(p_nom_layer_hp_l) <= p_nom_dummy_hp.
+                # Dummy HP: single extendable link that carries all layer-HP
+                # investment cost (layer HPs have capital_cost=0); the capacity
+                # constraint in solve_network ties sum_l(p_nom_layer_hp) <=
+                # p_nom_dummy_hp. bus0 = heat keeps both sides in MW_th.
                 n.add("Carrier", f"{heat_system} ptes heat pump")
-
                 costs_name_heat_pump = heat_system.heat_pump_costs_name(HeatSource.PTES)
                 n.add(
                     "Link",
@@ -3351,6 +3363,144 @@ def add_heat(
                     carrier=f"{heat_system} ptes heat pump",
                     capital_cost=costs.at[costs_name_heat_pump, "capital_cost"]
                     * overdim_factor,
+                    p_nom_extendable=True,
+                    lifetime=costs.at[costs_name_heat_pump, "lifetime"],
+                )
+
+            else:
+                # ============================================================
+                # Simple energy-only model (< 3 layers): one MWh store at the top
+                # temperature. On discharge q_dis is split between heat delivered
+                # directly to DH and heat routed to the booster HP evaporator; the
+                # HP runs only when T_forward > T_top. No volume, no per-layer
+                # bookkeeping, no vents.
+                # ============================================================
+                n.add("Carrier", f"{heat_system} ptes hp input")
+
+                n.add(
+                    "Bus",
+                    nodes + f" {heat_system} water pits",
+                    location=nodes,
+                    carrier=f"{heat_system} water pits",
+                    unit="MWh",
+                )
+                n.add(
+                    "Bus",
+                    nodes + f" {heat_system} ptes hp input",
+                    location=nodes,
+                    carrier=f"{heat_system} ptes hp input",
+                    unit="MWh",
+                )
+
+                # Energy store (MWh), capacity scaled by the operating temperature
+                # spread via e_max_pu.
+                n.add(
+                    "Store",
+                    nodes,
+                    suffix=f" {heat_system} water pits",
+                    bus=nodes + f" {heat_system} water pits",
+                    e_cyclic=True,
+                    e_nom_extendable=True,
+                    e_max_pu=e_max_pu,
+                    carrier=f"{heat_system} water pits",
+                    standing_loss=costs.at[
+                        "central water pit storage", "standing_losses"
+                    ]
+                    / 100,
+                    capital_cost=costs.at["central water pit storage", "capital_cost"],
+                    lifetime=costs.at["central water pit storage", "lifetime"],
+                )
+
+                # Charger: UCH heat -> store (1 MWh stored per MWh DH heat).
+                charger_name = nodes + f" {heat_system} water pits charger"
+                n.add(
+                    "Link",
+                    nodes,
+                    suffix=f" {heat_system} water pits charger",
+                    bus0=nodes + f" {heat_system} heat",
+                    bus1=nodes + f" {heat_system} water pits",
+                    efficiency=1.0,
+                    carrier=f"{heat_system} water pits charger",
+                    p_nom_extendable=True,
+                    lifetime=costs.at["central water pit storage", "lifetime"],
+                    marginal_cost=costs.at[
+                        "central water pit charger", "marginal_cost"
+                    ],
+                )
+                n.links.loc[charger_name, "energy to power ratio"] = (
+                    energy_to_power_ratio_water_pit
+                )
+
+                # Discharger: store -> direct DH heat (efficiency) + booster HP
+                # input (efficiency2). The two fractions sum to 1, so the store
+                # debit is conserved.
+                direct_efficiency = (
+                    ptes_ds["simple_discharger_direct_efficiency"]
+                    .transpose("time", "name")
+                    .to_pandas()
+                    .reindex(columns=nodes)
+                )
+                hp_input_efficiency = (
+                    ptes_ds["simple_discharger_hp_efficiency"]
+                    .transpose("time", "name")
+                    .to_pandas()
+                    .reindex(columns=nodes)
+                )
+                n.add(
+                    "Link",
+                    nodes,
+                    suffix=f" {heat_system} water pits discharger",
+                    bus0=nodes + f" {heat_system} water pits",
+                    bus1=nodes + f" {heat_system} heat",
+                    bus2=nodes + f" {heat_system} ptes hp input",
+                    efficiency=direct_efficiency,
+                    efficiency2=hp_input_efficiency,
+                    carrier=f"{heat_system} water pits discharger",
+                    marginal_cost=costs.at[
+                        "central water pit discharger", "marginal_cost"
+                    ],
+                    p_nom_extendable=True,
+                    lifetime=costs.at["central water pit storage", "lifetime"],
+                )
+
+                # Booster HP (reversed, bus0 = UCH heat): delivers q_out to DH,
+                # drawing 1/COP electricity (bus1) and (COP-1)/COP store heat off
+                # the hp-input bus (bus2). Runs only when forward-boosting is
+                # needed. Electricity MUST be bus1 (distribution-grid rewiring).
+                needs_boosting = (
+                    ptes_ds["simple_needs_boosting"]
+                    .transpose("time", "name")
+                    .to_pandas()
+                    .reindex(columns=nodes)
+                )
+                hp_elec_efficiency = (
+                    ptes_ds["simple_hp_elec_efficiency"]
+                    .transpose("time", "name")
+                    .to_pandas()
+                    .reindex(columns=nodes)
+                )
+                hp_input_to_heat_efficiency = (
+                    ptes_ds["simple_hp_input_efficiency"]
+                    .transpose("time", "name")
+                    .to_pandas()
+                    .reindex(columns=nodes)
+                )
+                n.add("Carrier", f"{heat_system} ptes heat pump")
+                costs_name_heat_pump = heat_system.heat_pump_costs_name(HeatSource.PTES)
+                n.add(
+                    "Link",
+                    nodes,
+                    suffix=f" {heat_system} ptes heat pump",
+                    bus0=nodes + f" {heat_system} heat",
+                    bus1=nodes,
+                    bus2=nodes + f" {heat_system} ptes hp input",
+                    efficiency=hp_elec_efficiency,
+                    efficiency2=hp_input_to_heat_efficiency,
+                    carrier=f"{heat_system} ptes heat pump",
+                    capital_cost=costs.at[costs_name_heat_pump, "capital_cost"]
+                    * overdim_factor,
+                    p_max_pu=0,
+                    p_min_pu=-needs_boosting,
                     p_nom_extendable=True,
                     lifetime=costs.at[costs_name_heat_pump, "lifetime"],
                 )

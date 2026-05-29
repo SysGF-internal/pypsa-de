@@ -745,7 +745,17 @@ rule build_ptes_operations:
             "sector",
             "district_heating",
             "ptes",
-            "interlayer_heat_transfer_coefficient",
+            "layered",
+            "heat_transfer_coefficient",
+        ),
+        booster_source_dt=config_provider(
+            "sector",
+            "district_heating",
+            "ptes",
+            "booster_source_dt",
+        ),
+        heat_pump_cop_approximation=config_provider(
+            "sector", "district_heating", "heat_pump_cop_approximation"
         ),
     input:
         central_heating_forward_temperature_profiles=resources(
@@ -755,7 +765,6 @@ rule build_ptes_operations:
             "central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
         regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
-        cop_profiles=resources("cop_profiles_base_s_{clusters}_{planning_horizons}.nc"),
     output:
         ptes_operations=resources(
             "ptes_operations_base_s_{clusters}_{planning_horizons}.nc"

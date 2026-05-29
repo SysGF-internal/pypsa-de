@@ -666,7 +666,15 @@ sector:
       bottom_temperature: 35
       design_top_temperature: 90
       design_bottom_temperature: 35
+      # Source-side temperature drop ΔT [K] of the PTES booster heat pump: how far
+      # below the HP inlet the discharged volume is cooled across the evaporator.
+      # Sets the COP source-outlet and the deposit-layer target.
+      booster_source_dt: 6
       layered:
+        # The layered volume model is used when >= 3 layer_temperatures are given;
+        # fewer layers fall back to the simple energy-only model. This flag only
+        # gates the per-layer heat-source COP expansion in build_cop_profiles.
+        enable: false
         layer_temperatures: [90]
         heat_transfer_coefficient: 0.01  # H [W/(m²·K)]
     ates:
