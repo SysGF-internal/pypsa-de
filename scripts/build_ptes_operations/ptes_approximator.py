@@ -26,7 +26,6 @@ class PtesApproximator:
         design_top_temperature: float,
         design_bottom_temperature: float,
         design_standing_losses: float,
-        interlayer_heat_transfer_coefficient: float,
         cop_approximation_params: dict,
         booster_source_dt: float,
         rho=1000,
@@ -50,7 +49,6 @@ class PtesApproximator:
         self.design_top_temperature = design_top_temperature
         self.design_bottom_temperature = design_bottom_temperature
         self.design_standing_losses = design_standing_losses
-        self.interlayer_heat_transfer_coefficient = interlayer_heat_transfer_coefficient
         self.cop_approximation_params = cop_approximation_params
         self.booster_source_dt = booster_source_dt
         self.rho = rho
@@ -374,21 +372,6 @@ class PtesApproximator:
         return dest_available & (t_source < t_dest)
 
     @property
-    def interlayer_heat_transfer_coefficients(self) -> xr.DataArray:
-        """
-        Per-layer interlayer heat-transfer coefficient Ψ, dims ``(layer,)``.
-
-        Uses the configured ``interlayer_heat_transfer_coefficient`` directly (the
-        per-timestep downward-flux fraction used by the standing-loss interlayer
-        constraint in solve_network, ``p_{l->l+1} = -Ψ·e_l``).
-        """
-        return xr.full_like(
-            self.layer_temperatures_da,
-            self.interlayer_heat_transfer_coefficient,
-            dtype=float,
-        )
-
-    @property
     def standing_losses(self) -> np.ndarray:
         """Per-layer standing-loss design value [-]."""
         return np.full(self.num_layers, self.design_standing_losses)
@@ -500,9 +483,6 @@ class PtesApproximator:
             ds["hp_return_layer"] = self.hp_return_layer
             ds["booster_elec_efficiency"] = self.booster_elec_efficiency
             ds["booster_volume_efficiency"] = self.booster_volume_efficiency
-            ds["interlayer_heat_transfer_coefficients"] = (
-                self.interlayer_heat_transfer_coefficients
-            )
             ds["standing_losses"] = xr.DataArray(
                 self.standing_losses,
                 dims=["layer"],

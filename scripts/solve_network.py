@@ -126,8 +126,10 @@ def add_land_use_constraint_perfect(n: pypsa.Network) -> None:
     # adjust name to fit syntax of nominal constraint per bus
     df = p_nom_max.reset_index()
     df["name"] = df.apply(
-        lambda row: f"nom_max_{row['carrier']}"
-        + (f"_{row['build_year']}" if row["build_year"] is not None else ""),
+        lambda row: (
+            f"nom_max_{row['carrier']}"
+            + (f"_{row['build_year']}" if row["build_year"] is not None else "")
+        ),
         axis=1,
     )
 
@@ -1073,48 +1075,63 @@ def add_layered_ptes_interlayer_flow_constraint(
     n: pypsa.Network, ptes_ds: xr.Dataset
 ) -> None:
     """
-    Enforce interlayer heat diffusion proportional to upper-layer SOC.
+    Enforce standing loss as standing-loss-driven interlayer diffusion.
 
-    For each interlayer link:
-        p_{l→l+1, t}  =  -Ψ_{l,l+1} · e_{l, t}   ∀ t
+    For each node, the total energy lost to downward interlayer flow per
+    snapshot equals the standing-loss rate times the stored energy; the
+    optimiser is free to distribute it across the interlayer links:
 
-    where Ψ is the interlayer transfer coefficient and e_{l,t} is the
-    state-of-energy of the upper layer store.
+        Σ_l (C_l - C_{l+1}) · p_{l→l+1, t}  =  γ · Σ_l C_l · e_{l, t}   ∀ t
+
+    where C_l = m3_to_mwh[l] converts layer volume [m3] to energy [MWh],
+    e_{l,t} is the layer SOC [m3] and γ is the store standing-loss rate (the
+    aggregate store's ``standing_loss``, set from cost data in
+    prepare_sector_network). Moving 1 m3 from layer l down to l+1 destroys
+    (C_l - C_{l+1}) of stored energy.
     """
-    interlayer_links = n.links.index[n.links.carrier.str.contains("water pits inter")]
-    if interlayer_links.empty:
-        raise RuntimeError(
-            "No interlayer links found for layered PTES interlayer flow constraints."
-        )
-    elif len(interlayer_links) > len(ptes_ds.layer - 1) * len(ptes_ds.name):
-        raise RuntimeError(
-            f"More interlayer links ({len(interlayer_links)}) found than layers in dataset ({len(ptes_ds.layer)})."
-        )
+    m3_to_mwh = ptes_ds["m3_to_mwh"].values  # (layer,)
+
+    agg_stores = n.stores.index[
+        n.stores.index.str.contains("water pits")
+        & ~n.stores.index.str.contains("layer")
+        & n.stores.e_nom_extendable
+    ]
 
     constraints = []
-    for link_name in interlayer_links:
-        upper_layer_bus = n.links.at[link_name, "bus0"]
-        # lower_layer_bus = n.links.at[link_name, "bus1"]
+    for agg in agg_stores:
+        prefix = agg.split("water pits")[0]  # "<node> <heat system> "
+        gamma = float(n.stores.at[agg, "standing_loss"])
 
-        upper_store = n.stores.index[n.stores.bus == upper_layer_bus]
-        if len(upper_store) == 1:
-            upper_store = upper_store[0]
-        else:
-            raise RuntimeError(
-                f"None or multiple stores found for upper layer bus {upper_layer_bus} in interlayer link {link_name}."
-            )
+        # Stored energy Σ_l C_l e_l.
+        layer_stores = n.stores.index[
+            n.stores.index.str.startswith(prefix + "water pits layer")
+        ]
+        stored_energy = None
+        for store in layer_stores:
+            layer = int(n.stores.at[store, "bus"].split("layer")[-1].strip())
+            term = m3_to_mwh[layer] * n.model["Store-e"].loc[:, store]
+            stored_energy = term if stored_energy is None else stored_energy + term
 
-        layer = int(upper_layer_bus.split("layer")[-1].strip())
-        heat_transfer_coef = float(
-            ptes_ds["interlayer_heat_transfer_coefficients"].sel(layer=layer).item()
+        # Energy lost downward Σ_l (C_l - C_{l+1}) p_{l→l+1}.
+        interlayer_links = n.links.index[
+            n.links.index.str.startswith(prefix + "water pits inter")
+        ]
+        lost_energy = None
+        for link in interlayer_links:
+            upper = int(n.links.at[link, "bus0"].split("layer")[-1].strip())
+            delta_c = m3_to_mwh[upper] - m3_to_mwh[upper + 1]
+            term = delta_c * n.model["Link-p"].loc[:, link]
+            lost_energy = term if lost_energy is None else lost_energy + term
+
+        constraints.append(lost_energy - gamma * stored_energy)
+
+    if not constraints:
+        raise RuntimeError(
+            "No aggregate PTES store found for layered interlayer flow constraints."
         )
 
-        link_p = n.model["Link-p"].loc[:, link_name]
-        store_e = n.model["Store-e"].loc[:, upper_store]
-        constraints.append(link_p - heat_transfer_coef * store_e)
-
     merged = linopy.expressions.merge(
-        constraints, dim="Link, Store" if PYPSA_V1 else "name"
+        constraints, dim="Store-ext" if PYPSA_V1 else "name"
     )
     n.model.add_constraints(merged == 0, name="layered_ptes_interlayer_flow")
 

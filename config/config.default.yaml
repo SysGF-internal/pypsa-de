@@ -676,7 +676,6 @@ sector:
         # gates the per-layer heat-source COP expansion in build_cop_profiles.
         enable: false
         layer_temperatures: [90]
-        heat_transfer_coefficient: 0.01  # H [W/(m²·K)]
     ates:
       enable: false
       suitable_aquifer_types:

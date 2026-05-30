@@ -741,13 +741,6 @@ rule build_ptes_operations:
             "layered",
             "layer_temperatures",
         ),
-        interlayer_heat_transfer_coefficient=config_provider(
-            "sector",
-            "district_heating",
-            "ptes",
-            "layered",
-            "heat_transfer_coefficient",
-        ),
         booster_source_dt=config_provider(
             "sector",
             "district_heating",
