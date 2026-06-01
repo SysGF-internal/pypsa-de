@@ -657,6 +657,9 @@ sector:
       upper_threshold_ambient_temperature: 10
       rolling_window_ambient_temperature: 72
       relative_annual_temperature_reduction: 0.01
+      # Optional lower clip [°C] on the forward-temperature curve (forward never
+      # drops below this). null disables clipping.
+      clip_forward_temperature: null
     ptes:
       enable: true
       temperature_dependent_capacity: false
