@@ -1,0 +1,76 @@
+remote:
+  ssh: "zecm"
+  path: "/home/users/c/cpschau/scratch/pypsa-eur-sysgf"
+
+# Capex sweep for layered PTES: PTES vs no-PTES across three district-heating
+# forward-temperature regimes, with a store-capex sweep on the PTES runs.
+#
+# NOTE: new prefix so the prior layer-count run under
+# results/260512_test_layered_ptes/ is preserved untouched. Copy it elsewhere
+# first if you want the two side by side.
+run:
+  prefix: "260531_layered_ptes_capex"
+  name:
+    # T regime "max forward T = 95 C"
+    - T95_noptes
+    - T95_ptes_capex50
+    - T95_ptes_capex25
+    - T95_ptes_capex10
+    - T95_ptes_capex5
+    # T regime "max forward T = 85 C"
+    - T85_noptes
+    - T85_ptes_capex50
+    - T85_ptes_capex25
+    - T85_ptes_capex10
+    - T85_ptes_capex5
+    # T regime "max forward T = 95 C, lower-clipped at 90 C"
+    - T95clip90_noptes
+    - T95clip90_ptes_capex50
+    - T95clip90_ptes_capex25
+    - T95clip90_ptes_capex10
+    - T95clip90_ptes_capex5
+  scenarios:
+    enable: true
+    file: config/scenarios.layered_ptes.yaml
+
+countries: ['AT', 'BE', 'CH', 'CZ', 'DE', 'DK', 'FR', 'GB', 'LU', 'NL', 'NO', 'PL', 'SE', 'ES', 'IT']
+scenario:
+  clusters:
+    - 27
+clustering:
+  focus_weights:
+  # 27 nodes: 8 for Germany, 3 for Italy, 2 each for Denmark, UK and Spain, 1 per each of other 10 "Stromnachbarn"
+    'DE': 0.2965
+    'AT': 0.0370
+    'BE': 0.0370
+    'CH': 0.0370
+    'CZ': 0.0370
+    'DK': 0.0741
+    'FR': 0.0741
+    'GB': 0.0741
+    'LU': 0.0370
+    'NL': 0.0370
+    'NO': 0.0370
+    'PL': 0.0370
+    'SE': 0.0370
+    'ES': 0.0741
+    'IT': 0.0741
+  temporal:
+    resolution_sector: 365H
+  renewable_carriers:
+    - solar
+    - onwind
+    - offwind-ac
+    - offwind-dc
+    - hydro
+sector:
+  co2_network: false
+  co2_spatial: false
+  district_heating:
+    geothermal:
+      ignore_missing_regions: true
+    supply_temperature_approximation:
+      # Pin the forward temperature to the configured baseyear values so the
+      # per-scenario "max forward T" is the value actually used (no annual
+      # reduction toward the investment year).
+      relative_annual_temperature_reduction: 0

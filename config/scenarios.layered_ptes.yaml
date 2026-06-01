@@ -1,0 +1,241 @@
+# -*- coding: utf-8 -*-
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
+#
+# SPDX-License-Identifier: MIT
+
+# Layered-PTES capex sweep. Three district-heating forward-temperature regimes
+# x {no PTES, PTES at four store-capex levels}.
+#
+# Capex: the 50/25/10/5 EUR/m3 store capex is applied as an absolute store
+# capital_cost [EUR/MWh] via `adjustments`, using EUR/MWh = EUR/m3 / (rho*c_p*dT)
+# with rho*c_p*dT = 0.0639 MWh/m3 at dT = 90-35 = 55 K (constant across
+# scenarios, e_max_pu = 1). 50/25/10/5 EUR/m3 -> 782/391/156/78 EUR/MWh.
+# NOTE: this sets the (annualised) store capital_cost directly; if the EUR/m3
+# figures are overnight costs, annualise them before use.
+#
+# Forward-T regimes override max_forward_temperature_baseyear for every run
+# country (deep merge would otherwise keep the higher defaults, e.g. CZ 130);
+# min_forward / return are extrapolated from DE as usual. The clip regime sets
+# the DE min to 90 so the forward temperature stays within [90, 95].
+
+# ---------------------------------------------------------------- T = 95 C
+T95_noptes:
+  sector:
+    district_heating:
+      supply_temperature_approximation: &T95
+        max_forward_temperature_baseyear:
+          AT: 95
+          BE: 95
+          CH: 95
+          CZ: 95
+          DE: 95
+          DK: 95
+          FR: 95
+          GB: 95
+          LU: 95
+          NL: 95
+          NO: 95
+          PL: 95
+          SE: 95
+          ES: 95
+          IT: 95
+      ptes:
+        enable: false
+
+T95_ptes_capex50:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T95
+      ptes: &ptes_layered
+        enable: true
+        layered:
+          enable: true
+          layer_temperatures: [90, 62.5, 35]
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 782
+
+T95_ptes_capex25:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T95
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 391
+
+T95_ptes_capex10:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T95
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 156
+
+T95_ptes_capex5:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T95
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 78
+
+# ---------------------------------------------------------------- T = 85 C
+T85_noptes:
+  sector:
+    district_heating:
+      supply_temperature_approximation: &T85
+        max_forward_temperature_baseyear:
+          AT: 85
+          BE: 85
+          CH: 85
+          CZ: 85
+          DE: 85
+          DK: 85
+          FR: 85
+          GB: 85
+          LU: 85
+          NL: 85
+          NO: 85
+          PL: 85
+          SE: 85
+          ES: 85
+          IT: 85
+      ptes:
+        enable: false
+
+T85_ptes_capex50:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T85
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 782
+
+T85_ptes_capex25:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T85
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 391
+
+T85_ptes_capex10:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T85
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 156
+
+T85_ptes_capex5:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T85
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 78
+
+# ------------------------------------------------ T = 95 C, lower-clipped 90 C
+T95clip90_noptes:
+  sector:
+    district_heating:
+      supply_temperature_approximation: &T95clip90
+        max_forward_temperature_baseyear:
+          AT: 95
+          BE: 95
+          CH: 95
+          CZ: 95
+          DE: 95
+          DK: 95
+          FR: 95
+          GB: 95
+          LU: 95
+          NL: 95
+          NO: 95
+          PL: 95
+          SE: 95
+          ES: 95
+          IT: 95
+        min_forward_temperature_baseyear:
+          DE: 90
+      ptes:
+        enable: false
+
+T95clip90_ptes_capex50:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T95clip90
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 782
+
+T95clip90_ptes_capex25:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T95clip90
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 391
+
+T95clip90_ptes_capex10:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T95clip90
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 156
+
+T95clip90_ptes_capex5:
+  sector:
+    district_heating:
+      supply_temperature_approximation: *T95clip90
+      ptes: *ptes_layered
+  adjustments:
+    sector:
+      absolute:
+        Store:
+          urban central water pits:
+            capital_cost: 78
