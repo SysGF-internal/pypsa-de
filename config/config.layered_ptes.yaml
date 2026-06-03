@@ -83,3 +83,6 @@ sector:
       # reflects the reduced usable spread at lower operational top temperatures.
       bottom_temperature: 10
       design_bottom_temperature: 10
+
+atlite:
+  nprocesses: 4
