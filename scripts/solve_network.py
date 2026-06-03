@@ -566,9 +566,9 @@ def add_CCL_constraints(
         agg_p_nom_limits: data/agg_p_nom_minmax.csv
     """
 
-    assert planning_horizons is not None, (
-        "add_CCL_constraints are not implemented for perfect foresight, yet"
-    )
+    assert (
+        planning_horizons is not None
+    ), "add_CCL_constraints are not implemented for perfect foresight, yet"
 
     agg_p_nom_minmax = pd.read_csv(
         config["solving"]["agg_p_nom_limits"]["file"], index_col=[0, 1], header=[0, 1]
@@ -1075,19 +1075,23 @@ def add_layered_ptes_interlayer_flow_constraint(
     n: pypsa.Network, ptes_ds: xr.Dataset
 ) -> None:
     """
-    Enforce standing loss as standing-loss-driven interlayer diffusion.
+    Enforce standing loss as a per-layer downward interlayer diffusion.
 
-    For each node, the total energy lost to downward interlayer flow per
-    snapshot equals the standing-loss rate times the stored energy; the
-    optimiser is free to distribute it across the interlayer links:
+    Each layer loses energy in proportion to its own content above the cold
+    reference, realised as a deterministic downward interlayer flux:
 
-        Σ_l (C_l - C_{l+1}) · p_{l→l+1, t}  =  γ · Σ_l C_l · e_{l, t}   ∀ t
+        (C_l - C_{l+1}) · p_{l→l+1, t}  =  γ · C_l · e_{l, t}   ∀ upper layer l, t
 
     where C_l = m3_to_mwh[l] converts layer volume [m3] to energy [MWh],
     e_{l,t} is the layer SOC [m3] and γ is the store standing-loss rate (the
     aggregate store's ``standing_loss``, set from cost data in
     prepare_sector_network). Moving 1 m3 from layer l down to l+1 destroys
     (C_l - C_{l+1}) of stored energy.
+
+    Colder layers therefore lose less (C_l → 0 at the bottom; the coldest layer
+    has no downward link and loses nothing) and the loss cools the hot top one
+    step down rather than being routed to the floor. The total destroyed energy
+    still sums to γ · Σ_l C_l · e_l = γ · E, so the scalar γ calibration holds.
     """
     m3_to_mwh = ptes_ds["m3_to_mwh"].values  # (layer,)
 
@@ -1102,28 +1106,23 @@ def add_layered_ptes_interlayer_flow_constraint(
         prefix = agg.split("water pits")[0]  # "<node> <heat system> "
         gamma = float(n.stores.at[agg, "standing_loss"])
 
-        # Stored energy Σ_l C_l e_l.
-        layer_stores = n.stores.index[
-            n.stores.index.str.startswith(prefix + "water pits layer")
-        ]
-        stored_energy = None
-        for store in layer_stores:
-            layer = int(n.stores.at[store, "bus"].split("layer")[-1].strip())
-            term = m3_to_mwh[layer] * n.model["Store-e"].loc[:, store]
-            stored_energy = term if stored_energy is None else stored_energy + term
+        # Layer index -> store, so each downward link can reference its source layer.
+        layer_store = {
+            int(n.stores.at[s, "bus"].split("layer")[-1].strip()): s
+            for s in n.stores.index
+            if s.startswith(prefix + "water pits layer")
+        }
 
-        # Energy lost downward Σ_l (C_l - C_{l+1}) p_{l→l+1}.
+        # Per layer l with a downward link: (C_l - C_{l+1}) p_{l→l+1} = γ C_l e_l.
         interlayer_links = n.links.index[
             n.links.index.str.startswith(prefix + "water pits inter")
         ]
-        lost_energy = None
         for link in interlayer_links:
             upper = int(n.links.at[link, "bus0"].split("layer")[-1].strip())
             delta_c = m3_to_mwh[upper] - m3_to_mwh[upper + 1]
-            term = delta_c * n.model["Link-p"].loc[:, link]
-            lost_energy = term if lost_energy is None else lost_energy + term
-
-        constraints.append(lost_energy - gamma * stored_energy)
+            lost = delta_c * n.model["Link-p"].loc[:, link]
+            stored = m3_to_mwh[upper] * n.model["Store-e"].loc[:, layer_store[upper]]
+            constraints.append(lost - gamma * stored)
 
     if not constraints:
         raise RuntimeError(
@@ -1181,8 +1180,13 @@ def add_layered_ptes_aggregate_throughput_constraint(
             )
             weighted_sum = term if weighted_sum is None else weighted_sum + term
 
+        # Charge/discharge power is limited to capacity / (energy-to-power ratio):
+        #   Σ_l C_l (p_ch + p_dis) ≤ ē_nom / R   ∀ t,
+        # i.e. R · Σ ≤ ē_nom. (E.g. a 4500 MWh pit with R = 150 h charges/discharges
+        # at ≤ 30 MW.) NB: R is on the energy side -- writing Σ ≤ R · ē_nom would
+        # leave the bound effectively non-binding.
         agg_e_nom = n.model["Store-e_nom"].loc[agg]
-        constraints.append(weighted_sum - e2p_ratio * agg_e_nom)
+        constraints.append(e2p_ratio * weighted_sum - agg_e_nom)
 
     merged = linopy.expressions.merge(
         constraints, dim="Store-ext" if PYPSA_V1 else "name"
