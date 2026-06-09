@@ -855,7 +855,9 @@ def add_operational_reserve_margin(n, sns, config):
     n.model.add_constraints(lhs <= rhs, name="Generator-p-reserve-upper")
 
 
-def add_TES_energy_to_power_ratio_constraints(n: pypsa.Network) -> None:
+def add_TES_energy_to_power_ratio_constraints(
+    n: pypsa.Network, include_water_pits: bool = True
+) -> None:
     """
     Add TES constraints to the network.
 
@@ -874,13 +876,19 @@ def add_TES_energy_to_power_ratio_constraints(n: pypsa.Network) -> None:
     RuntimeError
         If the TES storage and charger indices do not align.
     """
+    charger_pattern = "water tanks charger|water pits charger"
+    store_pattern = "water tanks|water pits"
+    if not include_water_pits:
+        charger_pattern = "water tanks charger"
+        store_pattern = "water tanks"
+
     indices_charger_p_nom_extendable = n.links.index[
-        n.links.index.str.contains("water tanks charger|water pits charger")
+        n.links.index.str.contains(charger_pattern)
         & ~n.links.index.str.contains("layer")
         & n.links.p_nom_extendable
     ]
     indices_stores_e_nom_extendable = n.stores.index[
-        n.stores.index.str.contains("water tanks|water pits")
+        n.stores.index.str.contains(store_pattern)
         & ~n.stores.index.str.contains("layer")
         & n.stores.e_nom_extendable
     ]
@@ -921,7 +929,9 @@ def add_TES_energy_to_power_ratio_constraints(n: pypsa.Network) -> None:
     n.model.add_constraints(merged_expr == 0, name="TES_energy_to_power_ratio")
 
 
-def add_TES_charger_ratio_constraints(n: pypsa.Network) -> None:
+def add_TES_charger_ratio_constraints(
+    n: pypsa.Network, include_water_pits: bool = True
+) -> None:
     """
     Add TES charger ratio constraints.
 
@@ -940,17 +950,25 @@ def add_TES_charger_ratio_constraints(n: pypsa.Network) -> None:
     RuntimeError
         If the charger and discharger indices do not align.
     """
-    indices_charger_p_nom_extendable = n.links.index[
-        n.links.index.str.contains(
-            "water tanks charger|water pits charger|aquifer thermal energy storage charger"
+    charger_pattern = (
+        "water tanks charger|water pits charger|aquifer thermal energy storage charger"
+    )
+    discharger_pattern = (
+        "water tanks discharger|water pits discharger|aquifer thermal energy storage discharger"
+    )
+    if not include_water_pits:
+        charger_pattern = "water tanks charger|aquifer thermal energy storage charger"
+        discharger_pattern = (
+            "water tanks discharger|aquifer thermal energy storage discharger"
         )
+
+    indices_charger_p_nom_extendable = n.links.index[
+        n.links.index.str.contains(charger_pattern)
         & ~n.links.index.str.contains("layer")
         & n.links.p_nom_extendable
     ]
     indices_discharger_p_nom_extendable = n.links.index[
-        n.links.index.str.contains(
-            "water tanks discharger|water pits discharger|aquifer thermal energy storage discharger"
-        )
+        n.links.index.str.contains(discharger_pattern)
         & ~n.links.index.str.contains("layer")
         & n.links.p_nom_extendable
     ]
@@ -1187,6 +1205,12 @@ def add_layered_ptes_aggregate_throughput_constraint(
         # leave the bound effectively non-binding.
         agg_e_nom = n.model["Store-e_nom"].loc[agg]
         constraints.append(e2p_ratio * weighted_sum - agg_e_nom)
+
+    if not constraints:
+        logger.warning(
+            "No valid layered PTES charger/discharger pairs found for aggregate throughput constraints. Skipping layered_ptes_aggregate_throughput."
+        )
+        return
 
     merged = linopy.expressions.merge(
         constraints, dim="Store-ext" if PYPSA_V1 else "name"
@@ -1431,16 +1455,22 @@ def extra_functionality(
     ):
         add_solar_potential_constraints(n, config)
 
+    layered_ptes = _has_layered_ptes(n)
+
     if n.config.get("sector", {}).get("ttes", False):
         if n.buses.index.str.contains(
             r"urban central heat|urban decentral heat|rural heat",
             case=False,
             na=False,
         ).any():
-            add_TES_energy_to_power_ratio_constraints(n)
-            add_TES_charger_ratio_constraints(n)
+            add_TES_energy_to_power_ratio_constraints(
+                n, include_water_pits=not layered_ptes
+            )
+            add_TES_charger_ratio_constraints(
+                n, include_water_pits=not layered_ptes
+            )
 
-    if _has_layered_ptes(n):
+    if layered_ptes:
         ptes_ds = xr.open_dataset(snakemake.input.ptes_operations)
         add_layered_ptes_volume_capacity_constraint(n, ptes_ds)
         add_layered_ptes_interlayer_flow_constraint(n, ptes_ds)
