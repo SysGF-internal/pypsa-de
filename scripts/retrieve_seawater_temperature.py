@@ -123,9 +123,8 @@ if __name__ == "__main__":
 
         if not os.path.exists(snakemake.output.seawater_temperature):
             raise FileNotFoundError(
-                f"Failed to retrieve seawater temperature data and save to {snakemake.output.seawater_temperature}. "
-                f"One reason might be missing Copernicus Marine login info. "
-                f"See the copernicusmarine package documentation for details."
+                f"Failed to save seawater temperature data to "
+                f"{snakemake.output.seawater_temperature}."
             )
 
         logger.info(
