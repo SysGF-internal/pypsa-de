@@ -177,6 +177,20 @@ def _load_regional_seawater_temperature(
         )
         return None
 
+    # Check if the clipped region contains any actual sea water data.
+    # Inland bounding boxes yield an all-NaN array; skip the expensive clip
+    # operation in the approximator for those.
+    sample = water_temperature.isel(time=0).load()
+    if bool(sample.isnull().all()):
+        logger.debug(
+            "No sea-water pixels for bounds (%.5f, %.5f, %.5f, %.5f); using empty result",
+            minx,
+            miny,
+            maxx,
+            maxy,
+        )
+        return None
+
     return water_temperature
 
 
