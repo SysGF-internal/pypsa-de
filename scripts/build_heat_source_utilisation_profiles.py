@@ -2,25 +2,28 @@
 #
 # SPDX-License-Identifier: MIT
 """
-Build heat source boosting ratio profiles for district heating networks.
+Build heat source boosting share profiles for district heating networks.
 
-This script calculates the boosting ratio (b) for each heat source: how
-much heat pump output is needed per unit of source heat to reach the forward
-temperature of the district heating network.
+This script calculates the boosting share (b) for each heat source: the
+fraction of extracted source heat that is routed through the heat pump's
+evaporator (rather than directly preheating the return flow).
 
-**Boosting ratio profile**: For each heat source and timestep, b is:
+**Boosting share profile**: For each heat source and timestep, b is:
 
 - 0 when T_source ≥ T_forward (direct use, no HP boost needed)
-- 1 when T_source < T_return (source cannot preheat return flow)
-- (T_forward − T_source) / (T_source − T_return) otherwise, clipped to [0, 1]
+- 1 when T_source ≤ T_return (source cannot preheat return flow)
+- ΔT_cool / (T_source − T_return + ΔT_cool) otherwise
 
-The boosting ratio is consumed by ``prepare_sector_network.py`` to set the
+where ΔT_cool is the source-side cooling applied by the heat pump.
+
+The boosting share is consumed by ``prepare_sector_network.py`` to set the
 efficiencies of the heat source utilisation link (forward, p ≥ 0):
 
 - bus0 (source) → bus1 (DH heat) at efficiency (1 − b)
-- bus0 (source) → bus2 (HP input bus) at efficiency2 = b
+- bus0 (source) → bus2 (HP cold-side input bus) at efficiency2 = b
 
-Energy is conserved: (1 − b) + b = 1.
+Energy is conserved: (1 − b) + b = 1, and the heat pump's bus balance adds
+exactly its electricity: Q_DH = Q_source + W_el.
 
 Relevant Settings
 -----------------
@@ -109,19 +112,24 @@ def get_boosting_profile(
     source_temperature: float | xr.DataArray,
     forward_temperature: xr.DataArray,
     return_temperature: xr.DataArray,
+    heat_pump_cooling: float | xr.DataArray,
 ) -> xr.DataArray:
     """
-    Calculate the boosting ratio: HP heat needed per unit of source heat.
+    Calculate the boosting share: fraction of source heat routed to the HP cold side.
 
-    The boosting ratio b represents the fraction of source heat that must be
-    routed through the heat pump (rather than used directly) to reach the
-    district heating forward temperature:
+    Per unit of heat extracted from the source stream (cooled from T_source down
+    to T_return − ΔT_cool, with equal mass flows on source and sink side), the
+    share b enters the heat pump evaporator while (1 − b) directly heats the
+    return flow:
 
-        b = 0                                                if T_source ≥ T_forward
-        b = 1                                                if T_source < T_return
-        b = (T_forward − T_source) / (T_source − T_return)  otherwise
+        b = 0                                            if T_source ≥ T_forward
+        b = 1                                            if T_source ≤ T_return
+        b = ΔT_cool / (T_source − T_return + ΔT_cool)    otherwise
 
-    The result is clipped to [0, 1].
+    where ΔT_cool is the source-side cooling applied by the heat pump. The
+    utilisation link delivers (1 − b) directly to district heating and routes b
+    to the heat pump's cold-side input bus, conserving energy:
+    Q_DH = Q_source + W_el.
 
     Parameters
     ----------
@@ -131,24 +139,28 @@ def get_boosting_profile(
         District heating forward temperature in °C, indexed by (time, name).
     return_temperature : xr.DataArray
         District heating return temperature in °C, indexed by (time, name).
+    heat_pump_cooling : float | xr.DataArray
+        Source-side temperature drop ΔT_cool through the heat pump evaporator [K].
 
     Returns
     -------
     xr.DataArray
-        Boosting ratio profile in [0, 1]: 0 = direct use, 1 = full HP boosting.
+        Boosting share profile in [0, 1]: 0 = direct use, 1 = full HP boosting.
         Shape matches forward_temperature.
     """
     return xr.where(
         source_temperature >= forward_temperature,
-        # no boosting needed if source_temp > forward_temp
+        # no boosting needed if source_temp >= forward_temp
         0.0,
         xr.where(
-            source_temperature < return_temperature,
-            # source does not pre-heat return flow if below return temp
-            1,
-            # if source is between return and forward temp, it pre-heats return flow (part of heat is utilised directly, part is boosted by HP)
-            (forward_temperature - source_temperature)
-            / (source_temperature - return_temperature),
+            source_temperature <= return_temperature,
+            # source cannot pre-heat the return flow if at/below return temp:
+            # all source heat enters the HP evaporator
+            1.0,
+            # between return and forward temp the source pre-heats the return
+            # flow (share 1 - b) and the HP draws the evaporator share b
+            heat_pump_cooling
+            / (source_temperature - return_temperature + heat_pump_cooling),
         ).clip(min=0, max=1),
     )
 
@@ -201,6 +213,7 @@ if __name__ == "__main__":
                     ),
                     forward_temperature=central_heating_forward_temperature,
                     return_temperature=central_heating_return_temperature,
+                    heat_pump_cooling=snakemake.params.heat_source_cooling,
                 ).assign_coords(heat_source=heat_source_key)
                 for heat_source_key in filtered_heat_sources
             ],

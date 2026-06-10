@@ -660,9 +660,8 @@ class HeatSource(Enum):
         """
         Get the carrier name for the intermediate bus between utilisation link and HP.
 
-        For preheating sources, the HP produces onto this bus and the utilisation
-        link consumes from it. For evaporator sources, the utilisation link
-        produces onto this bus and the HP draws from it as cold-side input.
+        The utilisation link routes the evaporator share of the source heat onto
+        this bus; the heat pump draws it as cold-side input.
 
         Parameters
         ----------
@@ -672,19 +671,17 @@ class HeatSource(Enum):
         Returns
         -------
         str
-            Carrier name in format '{heat_system} {source} heat heat pump output'.
+            Carrier name in format '{heat_system} {source} heat heat pump input'.
         """
-        return f"{self.heat_carrier(heat_system)} heat pump output"
+        return f"{self.heat_carrier(heat_system)} heat pump input"
 
     def intermediate_bus(self, nodes, heat_system) -> str:
         """
         Get the intermediate bus connecting the utilisation link and heat pump.
 
         For limited sources (requires_bus=True), returns the dedicated
-        intermediate bus. For preheating sources, the HP produces onto this bus
-        and the utilisation link consumes from it. For evaporator sources, the
-        utilisation link produces onto this bus and the HP draws from it as
-        cold-side input. For inexhaustible sources, returns an empty string.
+        intermediate bus carrying the heat pump's cold-side input. For
+        inexhaustible sources, returns an empty string.
 
         Parameters
         ----------
@@ -696,9 +693,9 @@ class HeatSource(Enum):
         Returns
         -------
         str
-            Bus name for evaporator sources, empty string otherwise.
+            Bus name for limited sources, empty string otherwise.
         """
-        if self.requires_bus and not self.supports_preheating:
+        if self.requires_bus:
             return nodes + f" {self.intermediate_carrier(heat_system)}"
         else:
             return ""
@@ -707,10 +704,8 @@ class HeatSource(Enum):
         """
         Get the bus where the heat pump outputs its heat (bus0).
 
-        For preheating sources, the HP outputs to the intermediate bus.
-        For all other sources, the HP outputs directly to the DH heat bus.
-        This always represents bus0 of the (reverse-operating) HP link,
-        preserving correct investment sizing.
+        Always the DH heat bus; bus0 of the (reverse-operating) HP link, so
+        p_nom is in MW_th delivered and investment sizing is consistent.
 
         Parameters
         ----------
@@ -724,19 +719,15 @@ class HeatSource(Enum):
         str
             The HP output bus name.
         """
-        if self.supports_preheating:
-            return nodes + f" {self.intermediate_carrier(heat_system)}"
-        else:
-            return nodes + f" {heat_system} heat"
+        return nodes + f" {heat_system} heat"
 
     def hp_eff2(self, cop):
         """
         Get efficiency2 for the heat pump link.
 
-        For preheating sources, eff2=0 (bus2 is unused). For evaporator
-        sources, eff2 = 1 - 1/COP represents the fraction of HP output
-        drawn from the cold side. For inexhaustible sources the same
-        formula applies but bus2="" so the value is irrelevant.
+        eff2 = 1 - 1/COP: the fraction of the HP's heat output drawn from the
+        cold side (the intermediate bus). For inexhaustible sources the value
+        is irrelevant because bus2 is empty.
 
         Parameters
         ----------
@@ -746,12 +737,9 @@ class HeatSource(Enum):
         Returns
         -------
         float or pd.DataFrame
-            0 for preheating sources, 1 - 1/COP otherwise.
+            1 - 1/COP.
         """
-        if self.supports_preheating:
-            return 0
-        else:
-            return 1 - 1 / cop
+        return 1 - 1 / cop
 
     def resource_bus(self, nodes, heat_system) -> str:
         """

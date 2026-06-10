@@ -3987,18 +3987,20 @@ def add_heat(
                     carrier=heat_source.intermediate_carrier(heat_system),
                 )
 
-                if heat_source.supports_preheating:
-                    boosting_profile = (
-                        heat_source_boosting_profile.sel(
-                            heat_source=heat_source.value,
-                            name=this_heat_source_nodes,
-                        )
-                        .transpose("time", "name")
-                        .to_pandas()
+                boosting_profile = (
+                    heat_source_boosting_profile.sel(
+                        heat_source=heat_source.value,
+                        name=this_heat_source_nodes,
                     )
-                # Utilisation link: resource_bus → DH heat + intermediate_bus
-                # Preheating: source directly heats DH (eff=1+b), HP boosts remainder (eff2=-b)
-                # Evaporator: all source → HP cold side (eff=0, eff2=1)
+                    .transpose("time", "name")
+                    .to_pandas()
+                )
+                # Utilisation link: resource_bus → DH heat + intermediate_bus.
+                # Per unit of source heat the share (1 - b) directly heats the
+                # return flow and the evaporator share b enters the heat pump's
+                # cold-side input bus, so Q_DH = Q_source + W_el is conserved.
+                # Preheating sources have 0 <= b <= 1 (b = 0 when T_src >=
+                # T_fwd); evaporator sources have b = 1 (all heat via HP).
                 n.add(
                     "Link",
                     this_heat_source_nodes,
@@ -4007,14 +4009,8 @@ def add_heat(
                     bus1=this_heat_source_nodes + f" {heat_system} heat",
                     bus2=this_heat_source_nodes
                     + f" {heat_source.intermediate_carrier(heat_system)}",
-                    efficiency=1 + boosting_profile / cop_heat_pump
-                    if heat_source.supports_preheating
-                    else 0,
-                    efficiency2=-boosting_profile
-                    * cop_heat_pump
-                    / (boosting_profile + cop_heat_pump)
-                    if heat_source.supports_preheating
-                    else 1,
+                    efficiency=1 - boosting_profile,
+                    efficiency2=boosting_profile,
                     carrier=f"{heat_system} {heat_source} heat utilisation",
                     p_nom_extendable=True,
                 )
