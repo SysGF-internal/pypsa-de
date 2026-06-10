@@ -18,7 +18,7 @@ temperature delta achievable in the district heating system:
 a) If source_temperature > forward_temperature (direct utilisation), potentials simply scale linearly in both directions, depending on the actual temperature difference (source_temperature - return_temperature):
    scale_factor = (source_temperature - return_temperature) / 15 K
 
-b) If forward_temperature >= source_temperature > return_temperature (preheating), the actual temperature difference is increased by the additional cooling through the geothermal-sourced heat pump `heat_source_cooling`:
+b) If forward_temperature >= source_temperature > return_temperature (preheating), the actual temperature difference is increased by the additional cooling through the geothermal-sourced heat pump (solved per time step in `build_heat_source_profiles`):
    scale_factor = (source_temperature - return_temperature + heat_source_cooling) / 15 K
 
 c) If source_temperature <= return_temperature (heat pump only), the actual temperature difference is only the exploitation induced by the heat pump:
@@ -127,8 +127,9 @@ def scale_heat_source_power(
         Return temperature profiles [°C]. Dims: (name,).
     source_temperature : float
         Constant geothermal source temperature [°C].
-    heat_source_cooling : float
+    heat_source_cooling : float | xr.DataArray
         Temperature drop in heat source when extracting heat via heat pump [K].
+        Either a flat value or the solved cooling profile with dims (time, name).
 
     Returns
     -------
@@ -139,6 +140,8 @@ def scale_heat_source_power(
     regions = heat_source_power.index
     forward_temp = forward_temperature.sel(name=regions)
     return_temp = return_temperature.sel(name=regions)
+    if isinstance(heat_source_cooling, xr.DataArray):
+        heat_source_cooling = heat_source_cooling.sel(name=regions)
 
     # Broadcast return_temperature to match forward_temperature dimensions
     return_temp_broadcast = return_temp.broadcast_like(forward_temp)
@@ -401,13 +404,19 @@ if __name__ == "__main__":
         snakemake.input.central_heating_return_temperature_profiles
     )
 
+    # Solved heat-pump cooling, consistent with the COP and boosting profiles
+    # (see build_heat_source_profiles).
+    heat_source_cooling = xr.open_dataarray(
+        snakemake.input.heat_source_cooling_profiles
+    ).sel(heat_source="geothermal", heat_system="urban central")
+
     # Scale heat source power based on temperature differences
     scaled_heat_source_power = scale_heat_source_power(
         heat_source_power=heat_source_power,
         forward_temperature=forward_temperature,
         return_temperature=return_temperature,
         source_temperature=snakemake.params.source_temperature,
-        heat_source_cooling=snakemake.params.heat_source_cooling,
+        heat_source_cooling=heat_source_cooling,
     )
 
     # Convert to DataFrame (time x regions) and save as CSV
