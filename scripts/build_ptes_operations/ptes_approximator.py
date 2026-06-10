@@ -335,6 +335,30 @@ class PtesApproximator:
         return self.rho * self.c_p * drop
 
     @property
+    def resistive_boost_per_m3(self) -> xr.DataArray:
+        """
+        Resistive boost heat required per m3 discharged [MWh/m3], dims
+        ``(layer, time, name)``.
+
+        With constant mass streams, boosting the forward stream from T_layer to
+        T_forward requires ``p_rh / p_dis = (T_fwd - T_l) / (T_l - T_ret)``.
+        Multiplying by the per-m3 direct heat ``E_l = rho*c_p*(T_l - T_ret)``
+        gives the per-m3 boost directly:
+
+            boost = rho*c_p * clip(T_fwd - T_layer, 0)
+
+        Masked to 0 for layers at/below the return layer (E_l = 0): without an
+        evaporator there is no way to extract sub-return heat, so those layers
+        cannot be discharged resistively at all.
+        """
+        boost = (
+            self.rho
+            * self.c_p
+            * (self.forward_temperature - self.layer_temperatures_da).clip(min=0.0)
+        )
+        return boost.where(self.discharger_heat_efficiency > 0, 0.0)
+
+    @property
     def charger_efficiency_by_source(self) -> xr.DataArray:
         """
         Volume gained per unit DH heat for the volume-trade charger [m3/MWh].
@@ -443,6 +467,23 @@ class PtesApproximator:
         cop = self.simple_hp_cop.clip(min=1.0 + 1e-3)
         return (cop - 1.0) / cop
 
+    @property
+    def simple_resistive_boost_per_discharge(self) -> xr.DataArray:
+        """
+        Resistive boost heat required per unit store discharge [-], dims
+        ``(time, name)``.
+
+        Single-store analogue of :attr:`resistive_boost_per_m3` with the layer
+        temperature equal to the store top temperature:
+
+            b = clip(T_fwd - T_top, 0) / (T_top - T_ret)
+
+        0 where the store cannot deliver above-return heat (T_top <= T_ret).
+        """
+        drop = self.top_temperature - self.return_temperature
+        boost = (self.forward_temperature - self.top_temperature).clip(min=0.0)
+        return (boost / drop.where(drop > 0)).fillna(0.0)
+
     def to_dataset(self) -> xr.Dataset:
         """Export the pre-computed PTES parameters as a single xr.Dataset."""
         layer_coord = np.arange(self.num_layers)
@@ -483,6 +524,7 @@ class PtesApproximator:
             ds["hp_return_layer"] = self.hp_return_layer
             ds["booster_elec_efficiency"] = self.booster_elec_efficiency
             ds["booster_volume_efficiency"] = self.booster_volume_efficiency
+            ds["resistive_boost_per_m3"] = self.resistive_boost_per_m3
             ds["standing_losses"] = xr.DataArray(
                 self.standing_losses,
                 dims=["layer"],
@@ -496,5 +538,8 @@ class PtesApproximator:
             ds["simple_discharger_hp_efficiency"] = self.simple_discharger_hp_efficiency
             ds["simple_hp_elec_efficiency"] = self.simple_hp_elec_efficiency
             ds["simple_hp_input_efficiency"] = self.simple_hp_input_efficiency
+            ds["simple_resistive_boost_per_discharge"] = (
+                self.simple_resistive_boost_per_discharge
+            )
 
         return ds

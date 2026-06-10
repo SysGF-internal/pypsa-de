@@ -1075,6 +1075,15 @@ def add_layered_ptes_heat_pump_capacity_constraint(
         n.links.index.str.contains("ptes heat pump") & n.links.p_nom_extendable
     ]
 
+    if dummy_hps.empty:
+        # No PTES booster heat pumps in the network (e.g. resistive discharge
+        # boosting); nothing to tie.
+        logger.info(
+            "No PTES dummy heat pumps found; skipping layered PTES heat pump "
+            "capacity constraint."
+        )
+        return
+
     exprs = []
     for dummy in dummy_hps:
         node_prefix = dummy.replace(" ptes heat pump", "")
