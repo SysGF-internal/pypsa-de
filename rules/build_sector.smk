@@ -303,6 +303,12 @@ rule build_central_heating_temperature_profiles:
             "supply_temperature_approximation",
             "relative_annual_temperature_reduction",
         ),
+        clip_forward_temperature=config_provider(
+            "sector",
+            "district_heating",
+            "supply_temperature_approximation",
+            "clip_forward_temperature",
+        ),
         energy_totals_year=config_provider("energy", "energy_totals_year"),
     input:
         temp_air_total=resources("temp_air_total_base_s_{clusters}.nc"),

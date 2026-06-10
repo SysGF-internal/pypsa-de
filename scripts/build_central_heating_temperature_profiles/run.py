@@ -270,7 +270,15 @@ if __name__ == "__main__":
         rolling_window_ambient_temperature=snakemake.params.rolling_window_ambient_temperature,
     )
 
-    central_heating_temperature_approximator.forward_temperature.to_netcdf(
+    forward_temperature = central_heating_temperature_approximator.forward_temperature
+    # Optional lower clip on the forward temperature curve: forward never drops
+    # below `clip_forward_temperature` (e.g. to keep the network above the PTES
+    # top temperature). No-op when the parameter is unset.
+    clip_forward_temperature = snakemake.params.clip_forward_temperature
+    if clip_forward_temperature is not None:
+        forward_temperature = forward_temperature.clip(min=clip_forward_temperature)
+
+    forward_temperature.to_netcdf(
         snakemake.output.central_heating_forward_temperature_profiles
     )
     central_heating_temperature_approximator.return_temperature.to_netcdf(
