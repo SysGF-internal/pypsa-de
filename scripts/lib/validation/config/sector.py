@@ -150,7 +150,7 @@ class _PtesConfig(BaseModel):
         },
         description="Layered PTES volume model settings. The layered model is used when >= 3 "
         "layer_temperatures are given; fewer layers fall back to the simple energy-only model. "
-        "The enable flag gates the per-layer heat-source COP expansion in `build_cop_profiles`.",
+        "The enable flag gates the per-layer heat-source COP expansion in `build_heat_source_profiles`.",
     )
     potential_limit: dict[str, Any] = Field(
         default_factory=lambda: {
@@ -264,7 +264,24 @@ class _DistrictHeatingConfig(ConfigModel):
         description="Aquifer thermal energy storage settings.",
     )
     heat_source_cooling: float = Field(
-        6, description="Cooling of heat source for heat pumps."
+        6,
+        description="Cooling of heat source for heat pumps [K]. For preheating "
+        "central sources this is the starting guess of the iterative solve "
+        "(see heat_pump_cooling_iterative); for all other sources it is the "
+        "flat cooling value.",
+    )
+    heat_pump_cooling_iterative: bool = Field(
+        True,
+        description="Solve the source-side cooling and the COP consistently for "
+        "preheating central heat sources via fixed-point (Picard) iteration of "
+        "dT_cool = (COP - 1)/COP * (T_forward - T_source). If False, the flat "
+        "heat_source_cooling value is used for all sources.",
+    )
+    log_heat_pump_cooling_iterations: bool = Field(
+        False,
+        description="Debugging aid: write the full per-node, per-timestep, "
+        "per-iteration cooling/COP trace of the iterative solve to "
+        "heat_pump_cooling_iterations_<...>.csv alongside the COP profiles.",
     )
     heat_pump_cop_approximation: dict[str, Any] = Field(
         default_factory=lambda: {
@@ -1195,8 +1212,8 @@ class SectorConfig(BaseModel):
         Ensure every config-temperature heat source (geothermal, PtX waste)
         has an entry in ``district_heating.heat_source_temperatures``.
 
-        These temperatures are needed by ``build_cop_profiles`` and
-        ``build_heat_source_utilisation_profiles`` to compute COPs and
+        These temperatures are needed by ``build_heat_source_profiles``
+        to compute COPs and
         direct-use / preheating / boosting ratios.
         """
         configured_temps = self.district_heating.heat_source_temperatures

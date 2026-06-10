@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.build_cop_profiles.run import expand_heat_sources_for_ptes_layers
+from scripts.build_heat_source_profiles.run import expand_heat_sources_for_ptes_layers
 
 
 def test_expand_heat_sources_for_multilayer_ptes_replaces_plain_ptes():

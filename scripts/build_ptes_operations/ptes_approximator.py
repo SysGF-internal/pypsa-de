@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from scripts.build_cop_profiles.central_heating_cop_approximator import (
+from scripts.build_heat_source_profiles.central_heating_cop_approximator import (
     CentralHeatingCopApproximator,
 )
 
@@ -275,7 +275,7 @@ class PtesApproximator:
         ``(layer, name, time)``.
 
         Computed directly from the discrete layer geometry (rather than in
-        build_cop_profiles) so the evaporator outlet is the *snapped* deposit
+        build_heat_source_profiles) so the evaporator outlet is the *snapped* deposit
         layer temperature -- consistent with the evaporator enthalpy ``E_hp`` used
         for the volume bookkeeping. Geometry:
           - sink_outlet  = T_forward (DH water leaves the condenser at forward T)
