@@ -65,7 +65,7 @@ from scripts.build_cop_profiles.central_heating_cop_approximator import (
 from scripts.build_cop_profiles.decentral_heating_cop_approximator import (
     DecentralHeatingCopApproximator,
 )
-from scripts.definitions.heat_source import HeatSource
+from scripts.definitions.heat_source import HeatSource, HeatSourceType
 from scripts.definitions.heat_system_type import HeatSystemType
 
 
@@ -167,6 +167,14 @@ def get_source_temperature(
     heat_source = HeatSource(heat_source_name)
     if heat_source.temperature_from_config:
         return snakemake_params["heat_source_temperatures"][heat_source_name]
+    elif heat_source.source_type == HeatSourceType.STORAGE:
+        # PTES layer temperatures are explicit constants from config.
+        ptes_layer_temperatures = snakemake_params["ptes_layer_temperatures"]
+        if heat_source_name.startswith("ptes layer"):
+            layer_idx = int(heat_source_name.split()[-1])
+            return float(ptes_layer_temperatures[layer_idx])
+        else:
+            return float(ptes_layer_temperatures[0])
     else:
         return xr.open_dataarray(snakemake_input[f"temp_{heat_source_name}"])
 
@@ -207,9 +215,9 @@ def get_source_inlet_temperature(
     # When source temperature <= return temperature, no preheating:
     # heat pump draws directly from the source.
     return xr.where(
-        source_temperature > central_heating_return_temperature,
-        central_heating_return_temperature,
+        source_temperature < central_heating_return_temperature,
         source_temperature,
+        central_heating_return_temperature,
     )
 
 
@@ -245,9 +253,37 @@ def get_sink_inlet_temperature(
     """
     return xr.where(
         source_temperature > central_heating_return_temperature,
-        source_temperature,
         central_heating_return_temperature,
+        source_temperature,
     )
+
+
+def expand_heat_sources_for_ptes_layers(
+    heat_sources_by_system: dict[str, list[str]],
+    ptes_layer_temperatures: list[float] | None,
+) -> dict[str, list[str]]:
+    """
+    Replace ``'ptes'`` by per-layer ``ptes layer {l}`` labels when multiple PTES
+    layers exist (the per-layer heat-source COP). A single layer keeps the plain
+    ``'ptes'`` source unchanged. The input mapping is not mutated.
+
+    The booster heat-pump COP is no longer built here: it is computed inside
+    ``PtesApproximator`` (build_ptes_operations), where the discrete deposit layer
+    is known, so the COP source-outlet matches the layer the volume lands in.
+    """
+    num_layers = len(ptes_layer_temperatures)
+    if num_layers <= 1:
+        return heat_sources_by_system
+
+    layer_sources = [f"ptes layer {layer}" for layer in range(num_layers)]
+    return {
+        system: [
+            source
+            for entry in sources
+            for source in (layer_sources if entry == "ptes" else [entry])
+        ]
+        for system, sources in heat_sources_by_system.items()
+    }
 
 
 if __name__ == "__main__":
@@ -268,8 +304,16 @@ if __name__ == "__main__":
         snakemake.input.central_heating_return_temperature_profiles
     )
 
+    if snakemake.params.layered_ptes:
+        heat_sources_by_system = expand_heat_sources_for_ptes_layers(
+            heat_sources_by_system=snakemake.params.heat_sources,
+            ptes_layer_temperatures=snakemake.params.ptes_layer_temperatures,
+        )
+    else:
+        heat_sources_by_system = snakemake.params.heat_sources
+
     cop_all_system_types = []
-    for heat_system_type, heat_sources in snakemake.params.heat_sources.items():
+    for heat_system_type, heat_sources in heat_sources_by_system.items():
         cop_this_system_type = []
         if not heat_sources:
             cop_all_system_types.append(
@@ -311,7 +355,7 @@ if __name__ == "__main__":
 
     cop_dataarray = xr.concat(
         cop_all_system_types,
-        dim=pd.Index(snakemake.params.heat_sources.keys(), name="heat_system"),
+        dim=pd.Index(heat_sources_by_system.keys(), name="heat_system"),
     )
 
     cop_dataarray.to_netcdf(snakemake.output.cop_profiles)

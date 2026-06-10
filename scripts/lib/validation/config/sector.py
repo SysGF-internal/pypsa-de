@@ -136,6 +136,22 @@ class _PtesConfig(BaseModel):
         gt=0,
         description="Design bottom temperature in °C for capacity calculation.",
     )
+    booster_source_dt: float = Field(
+        6,
+        gt=0,
+        description="Source-side temperature drop ΔT in K of the PTES booster heat pump: how far "
+        "below the HP inlet the discharged volume is cooled across the evaporator. "
+        "Sets the COP source-outlet and the deposit-layer target. See `build_ptes_operations`.",
+    )
+    layered: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "enable": False,
+            "layer_temperatures": [90],
+        },
+        description="Layered PTES volume model settings. The layered model is used when >= 3 "
+        "layer_temperatures are given; fewer layers fall back to the simple energy-only model. "
+        "The enable flag gates the per-layer heat-source COP expansion in `build_cop_profiles`.",
+    )
     potential_limit: dict[str, Any] = Field(
         default_factory=lambda: {
             "enable": False,

@@ -53,20 +53,18 @@ class HeatSourceType(Enum):
 
 class HeatSource(Enum):
     """
-    Enumeration representing different heat sources for heat pumps and direct utilisation.
+    Enumeration representing different heat sources for heat pumps and utilisation.
 
     Heat sources are categorized by their characteristics:
 
     **Inexhaustible sources** (AIR, GROUND, SEA_WATER):
         Always available, no resource bus needed, heat pump draws from ambient.
 
-    **Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, LAKE_WATER, PTES):
+    **Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, PTES):
         Have spatial/temporal constraints, require resource tracking via buses.
-        May support direct utilisation or preheating depending on temperature.
-
-    **Sources with preheater** (PTES):
-        When source temperature is between return and forward temperatures,
-        can preheat return flow before heat pump provides final lift.
+        A utilisation link splits source heat into direct DH contribution
+        (fraction 1 − b) and HP input (fraction b), where b is the
+        boosting ratio from ``build_heat_source_utilisation_profiles``.
 
     Attributes
     ----------
@@ -76,8 +74,6 @@ class HeatSource(Enum):
         River water heat source with time-varying temperature.
     SEA_WATER : str
         Sea water heat source (treated as inexhaustible).
-    LAKE_WATER : str
-        Lake water heat source (treated as inexhaustible).
     AIR : str
         Ambient air heat source (inexhaustible).
     GROUND : str
@@ -88,7 +84,7 @@ class HeatSource(Enum):
     See Also
     --------
     HeatSystem : Defines heat system types (urban central, urban decentral, rural).
-    build_heat_source_utilisation_profiles : Calculates utilisation profiles for heat sources.
+    build_heat_source_utilisation_profiles : Calculates boosting ratio profiles for heat sources.
     build_cop_profiles : Calculates COP profiles for heat pumps using these sources.
     """
 
@@ -99,6 +95,16 @@ class HeatSource(Enum):
     AIR = "air"
     GROUND = "ground"
     PTES = "ptes"
+    PTES_LAYER_0 = "ptes layer 0"
+    PTES_LAYER_1 = "ptes layer 1"
+    PTES_LAYER_2 = "ptes layer 2"
+    PTES_LAYER_3 = "ptes layer 3"
+    PTES_LAYER_4 = "ptes layer 4"
+    PTES_LAYER_5 = "ptes layer 5"
+    PTES_LAYER_6 = "ptes layer 6"
+    PTES_LAYER_7 = "ptes layer 7"
+    PTES_LAYER_8 = "ptes layer 8"
+    PTES_LAYER_9 = "ptes layer 9"
     # PTX excess heat sources
     ELECTROLYSIS_WASTE = "electrolysis_waste"
     FISCHER_TROPSCH_WASTE = "fischer_tropsch_waste"
@@ -117,7 +123,7 @@ class HeatSource(Enum):
             The string representation of the heat source.
         """
         return self.value
-    
+
     @property
     def source_type(self) -> HeatSourceType:
         """
@@ -136,28 +142,22 @@ class HeatSource(Enum):
             HeatSource.LAKE_WATER,
         ]:
             return HeatSourceType.SUPPLY_LIMITED
-        elif self == HeatSource.PTES:
+        elif self in [
+            HeatSource.PTES,
+            HeatSource.PTES_LAYER_0,
+            HeatSource.PTES_LAYER_1,
+            HeatSource.PTES_LAYER_2,
+            HeatSource.PTES_LAYER_3,
+            HeatSource.PTES_LAYER_4,
+            HeatSource.PTES_LAYER_5,
+            HeatSource.PTES_LAYER_6,
+            HeatSource.PTES_LAYER_7,
+            HeatSource.PTES_LAYER_8,
+            HeatSource.PTES_LAYER_9,
+        ]:
             return HeatSourceType.STORAGE
         else:
             return HeatSourceType.PROCESS_WASTE
-
-    @property
-    def spatial(self) -> Spatial:
-        """
-        Spatial scope at which this heat source is instantiated in the network.
-
-        PROCESS_WASTE sources are tied to PTX processes defined at parent cluster
-        level, so their heat infrastructure must only be built at parent nodes.
-        All other sources can exist at subnode level.
-
-        Returns
-        -------
-        Spatial
-            PARENT_NODE for PTX waste heat sources, SUB_NODE for all others.
-        """
-        if self.source_type == HeatSourceType.PROCESS_WASTE:
-            return Spatial.PARENT_NODE
-        return Spatial.SUB_NODE
 
     @property
     def temperature_from_config(self) -> bool:
@@ -181,6 +181,24 @@ class HeatSource(Enum):
         ]
 
     @property
+    def spatial(self) -> Spatial:
+        """
+        Spatial scope at which this heat source is instantiated in the network.
+
+        PROCESS_WASTE sources are tied to PTX processes defined at parent cluster
+        level, so their heat infrastructure must only be built at parent nodes.
+        All other sources can exist at subnode level.
+
+        Returns
+        -------
+        Spatial
+            PARENT_NODE for PTX waste heat sources, SUB_NODE for all others.
+        """
+        if self.source_type == HeatSourceType.PROCESS_WASTE:
+            return Spatial.PARENT_NODE
+        return Spatial.SUB_NODE
+
+    @property
     def requires_bus(self) -> bool:
         """
         Check whether the heat source requires a resource bus.
@@ -197,6 +215,24 @@ class HeatSource(Enum):
         return self.source_type != HeatSourceType.INEXHAUSTIBLE
 
     @property
+    def supports_preheating(self) -> bool:
+        """
+        Check if the heat source supports preheating district heating return flow.
+
+        Preheating sources have temperatures between return and forward
+        (T_ret <= T_src < T_fwd). The source directly heats return flow, and a
+        heat pump boosts only the remaining fraction to forward temperature.
+
+        Non-preheating limited sources (e.g., river_water) act as HP evaporator
+        input: all source heat enters the HP cold side.
+
+        Returns
+        -------
+        bool
+            True for PTES and GEOTHERMAL, False otherwise.
+        """
+        return self in [HeatSource.PTES, HeatSource.GEOTHERMAL]
+
     def requires_generator(self) -> bool:
         """
         Check if the heat source requires a generator component in the network.
@@ -249,12 +285,6 @@ class HeatSource(Enum):
             HeatSource.METHANOLISATION_WASTE: "methanolisation",
             HeatSource.ELECTROLYSIS_WASTE: "H2 Electrolysis",
             HeatSource.FUEL_CELL_WASTE: "H2 Fuel Cell",
-            HeatSource.FISCHER_TROPSCH_WASTE: "Fischer-Tropsch",
-            HeatSource.SABATIER_WASTE: "Sabatier",
-            HeatSource.HABER_BOSCH_WASTE: "Haber-Bosch",
-            HeatSource.METHANOLISATION_WASTE: "methanolisation",
-            HeatSource.ELECTROLYSIS_WASTE: "H2 Electrolysis",
-            HeatSource.FUEL_CELL_WASTE: "H2 Fuel Cell",
         }
         return mapping.get(self)
 
@@ -295,12 +325,6 @@ class HeatSource(Enum):
             HeatSource.METHANOLISATION_WASTE: "use_methanolisation_waste_heat",
             HeatSource.ELECTROLYSIS_WASTE: "use_electrolysis_waste_heat",
             HeatSource.FUEL_CELL_WASTE: "use_fuel_cell_waste_heat",
-            HeatSource.FISCHER_TROPSCH_WASTE: "use_fischer_tropsch_waste_heat",
-            HeatSource.SABATIER_WASTE: "use_methanation_waste_heat",
-            HeatSource.HABER_BOSCH_WASTE: "use_haber_bosch_waste_heat",
-            HeatSource.METHANOLISATION_WASTE: "use_methanolisation_waste_heat",
-            HeatSource.ELECTROLYSIS_WASTE: "use_electrolysis_waste_heat",
-            HeatSource.FUEL_CELL_WASTE: "use_fuel_cell_waste_heat",
         }
         return mapping.get(self)
 
@@ -318,11 +342,6 @@ class HeatSource(Enum):
             The technology name for costs lookup, or None if efficiency is calculated.
         """
         mapping = {
-            HeatSource.FISCHER_TROPSCH_WASTE: "Fischer-Tropsch",
-            HeatSource.HABER_BOSCH_WASTE: "Haber-Bosch",
-            HeatSource.ELECTROLYSIS_WASTE: "electrolysis",
-            HeatSource.HABER_BOSCH_WASTE: "Haber-Bosch",
-            HeatSource.METHANOLISATION_WASTE: "methanolisation",
             HeatSource.FISCHER_TROPSCH_WASTE: "Fischer-Tropsch",
             HeatSource.HABER_BOSCH_WASTE: "Haber-Bosch",
             HeatSource.ELECTROLYSIS_WASTE: "electrolysis",
@@ -349,7 +368,10 @@ class HeatSource(Enum):
         bool
             False for PTES with resistive boosting, True otherwise.
         """
-        if self == HeatSource.PTES and ptes_discharge_resistive_boosting:
+        if (
+            self.source_type == HeatSourceType.STORAGE
+            and ptes_discharge_resistive_boosting
+        ):
             logging.info(
                 "PTES configured with resistive boosting during discharge; "
                 "heat pump not built for PTES."
@@ -634,12 +656,13 @@ class HeatSource(Enum):
         """
         return f"{heat_system} {self} heat"
 
-    def preheater_input_carrier(self, heat_system) -> str:
+    def intermediate_carrier(self, heat_system) -> str:
         """
-        Get the carrier name for partially-cooled heat from this source.
+        Get the carrier name for the intermediate bus between utilisation link and HP.
 
-        Used in cascading temperature utilisation: heat that has been used
-        for direct supply but still has usable thermal energy.
+        For preheating sources, the HP produces onto this bus and the utilisation
+        link consumes from it. For evaporator sources, the utilisation link
+        produces onto this bus and the HP draws from it as cold-side input.
 
         Parameters
         ----------
@@ -649,32 +672,19 @@ class HeatSource(Enum):
         Returns
         -------
         str
-            Carrier name with '-pre-heater input' suffix in format '{heat_system} {source} pre-heater input'.
+            Carrier name in format '{heat_system} {source} heat heat pump output'.
         """
-        return f"{self.heat_carrier(heat_system)} pre-heater input"
+        return f"{self.heat_carrier(heat_system)} heat pump output"
 
-    def heat_pump_input_carrier(self, heat_system) -> str:
+    def intermediate_bus(self, nodes, heat_system) -> str:
         """
-        Get the carrier name for fully-cooled heat from this source.
+        Get the intermediate bus connecting the utilisation link and heat pump.
 
-        Represents heat pump input, for
-        final temperature lift by heat pump.
-
-        Parameters
-        ----------
-        heat_system : HeatSystem or str
-            The heat system (e.g., 'urban central').
-
-        Returns
-        -------
-        str
-            Carrier name with '-heat-pump input' suffix in format '{heat_system} {source} heat-pump input'.
-        """
-        return f"{self.heat_carrier(heat_system)} heat-pump input"
-
-    def preheater_input_bus(self, nodes, heat_system) -> str:
-        """
-        Get bus name for partially-cooled heat at the given nodes.
+        For limited sources (requires_bus=True), returns the dedicated
+        intermediate bus. For preheating sources, the HP produces onto this bus
+        and the utilisation link consumes from it. For evaporator sources, the
+        utilisation link produces onto this bus and the HP draws from it as
+        cold-side input. For inexhaustible sources, returns an empty string.
 
         Parameters
         ----------
@@ -686,9 +696,62 @@ class HeatSource(Enum):
         Returns
         -------
         str
-            Bus name combining nodes with medium-temperature carrier in format 'nodes + {heat_system} {source} pre-heater input'.
+            Bus name for evaporator sources, empty string otherwise.
         """
-        return nodes + f" {self.preheater_input_carrier(heat_system)}"
+        if self.requires_bus and not self.supports_preheating:
+            return nodes + f" {self.intermediate_carrier(heat_system)}"
+        else:
+            return ""
+
+    def hp_output_bus(self, nodes, heat_system) -> str:
+        """
+        Get the bus where the heat pump outputs its heat (bus0).
+
+        For preheating sources, the HP outputs to the intermediate bus.
+        For all other sources, the HP outputs directly to the DH heat bus.
+        This always represents bus0 of the (reverse-operating) HP link,
+        preserving correct investment sizing.
+
+        Parameters
+        ----------
+        nodes : pd.Index or str
+            Node identifier(s).
+        heat_system : HeatSystem or str
+            The heat system (e.g., 'urban central').
+
+        Returns
+        -------
+        str
+            The HP output bus name.
+        """
+        if self.supports_preheating:
+            return nodes + f" {self.intermediate_carrier(heat_system)}"
+        else:
+            return nodes + f" {heat_system} heat"
+
+    def hp_eff2(self, cop):
+        """
+        Get efficiency2 for the heat pump link.
+
+        For preheating sources, eff2=0 (bus2 is unused). For evaporator
+        sources, eff2 = 1 - 1/COP represents the fraction of HP output
+        drawn from the cold side. For inexhaustible sources the same
+        formula applies but bus2="" so the value is irrelevant.
+
+        Parameters
+        ----------
+        cop : float or pd.DataFrame
+            The coefficient of performance of the heat pump.
+
+        Returns
+        -------
+        float or pd.DataFrame
+            0 for preheating sources, 1 - 1/COP otherwise.
+        """
+        if self.supports_preheating:
+            return 0
+        else:
+            return 1 - 1 / cop
 
     def resource_bus(self, nodes, heat_system) -> str:
         """
