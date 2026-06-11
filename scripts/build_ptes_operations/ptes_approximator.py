@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import logging
+from functools import cached_property
 
 import numpy as np
 import pandas as pd
@@ -91,7 +92,7 @@ class PtesApproximator:
 
         self._time_dim = [d for d in forward_temperature.dims if d != "name"][0]
 
-    @property
+    @cached_property
     def is_layered(self) -> bool:
         """Whether the layered volume model applies (else the energy-only model)."""
         return self.num_layers >= LAYERED_MODEL_MIN_LAYERS
@@ -117,12 +118,12 @@ class PtesApproximator:
             min_delta_t_lift=p["min_delta_t_lift"],
         ).cop
 
-    @property
+    @cached_property
     def layer_temperatures(self) -> np.ndarray:
         """Fixed temperature of each layer [°C], hottest first."""
         return self._layer_temperatures
 
-    @property
+    @cached_property
     def layer_temperatures_da(self) -> xr.DataArray:
         """Fixed temperature of each layer [°C], hottest first."""
         return xr.DataArray(
@@ -131,7 +132,7 @@ class PtesApproximator:
             coords={"layer": np.arange(len(self._layer_temperatures))},
         )
 
-    @property
+    @cached_property
     def charging_availability(self) -> xr.DataArray:
         """
         Binary charging availability Φ⁺_{l,t}.
@@ -148,7 +149,7 @@ class PtesApproximator:
             dim=pd.Index(np.arange(self.num_layers), name="layer"),
         )
 
-    @property
+    @cached_property
     def layer_needs_boosting(self) -> xr.DataArray:
         """
         Binary indicator whether a layer requires boosting to reach forward temperature.
@@ -157,7 +158,7 @@ class PtesApproximator:
         """
         return xr.where(self.forward_temperature > self.layer_temperatures_da, 1, 0)
 
-    @property
+    @cached_property
     def m3_to_mwh(self) -> xr.DataArray:
         """Per-layer conversion from volume state to energy equivalent [MWh/m3]."""
         return (
@@ -166,7 +167,7 @@ class PtesApproximator:
             * (self.layer_temperatures_da - self.coldest_layer_temperature)
         )
 
-    @property
+    @cached_property
     def e_max_pu(self) -> float | xr.DataArray:
         """
         PTES capacity scaling against the design temperature spread.
@@ -186,7 +187,7 @@ class PtesApproximator:
             return ratio.clip(min=0.0)
         return max(ratio, 0.0)
 
-    @property
+    @cached_property
     def return_temp_layer(self) -> xr.DataArray:
         """Closest layer index to node-wise mean return temperature."""
 
@@ -196,12 +197,12 @@ class PtesApproximator:
             .astype(int)
         )
 
-    @property
+    @cached_property
     def return_layer_temperature(self) -> xr.DataArray:
         """Discrete temperature [°C] of each node's return layer. Dims ``(name,)``."""
         return self.layer_temperatures_da.isel(layer=self.return_temp_layer)
 
-    @property
+    @cached_property
     def preheater_return_layer(self) -> xr.DataArray:
         """
         Reinjection layer index for the discharger's no-boost return volume.
@@ -236,7 +237,7 @@ class PtesApproximator:
             ),
         ).astype(int)
 
-    @property
+    @cached_property
     def _hp_inlet_temperature(self) -> xr.DataArray:
         """
         Temperature [°C] at which the discharged volume enters the booster
@@ -250,7 +251,7 @@ class PtesApproximator:
         t_layer = self.layer_temperatures_da
         return xr.where(t_layer > t_ret_layer, t_ret_layer, t_layer)
 
-    @property
+    @cached_property
     def hp_return_layer(self) -> xr.DataArray:
         """
         Layer index corresponding to the booster heat pump outlet, dims
@@ -289,7 +290,7 @@ class PtesApproximator:
             ret_val, dim=pd.Index(np.arange(self.num_layers), name="layer")
         )
 
-    @property
+    @cached_property
     def _deposit_layer_temperature(self) -> xr.DataArray:
         """Layer temperature [°C] of the booster deposit (snapped), dims ``(layer, name)``."""
         deposit = self.hp_return_layer
@@ -299,7 +300,7 @@ class PtesApproximator:
             coords=deposit.coords,
         )
 
-    @property
+    @cached_property
     def _booster_evaporator_dt(self) -> xr.DataArray:
         """
         Per-m3 evaporator temperature drop the booster realises [K], dims
@@ -311,7 +312,7 @@ class PtesApproximator:
             min=0.0
         )
 
-    @property
+    @cached_property
     def booster_cop(self) -> xr.DataArray:
         """
         Per-layer COP of the layered-PTES booster heat pump, dims
@@ -338,7 +339,7 @@ class PtesApproximator:
             source_outlet=self._deposit_layer_temperature,
         )
 
-    @property
+    @cached_property
     def booster_elec_efficiency(self) -> xr.DataArray:
         """
         Electricity drawn per unit heat delivered by the booster HP (``1/COP``),
@@ -347,7 +348,7 @@ class PtesApproximator:
         """
         return 1.0 / self.booster_cop.clip(min=1.0 + 1e-3)
 
-    @property
+    @cached_property
     def booster_volume_efficiency(self) -> xr.DataArray:
         """
         Volume drawn from the hp-source bus per unit heat delivered by the booster
@@ -360,7 +361,7 @@ class PtesApproximator:
         e_hp = self.rho * self.c_p * self._booster_evaporator_dt
         return ((cop - 1.0) / (cop * e_hp).where(e_hp > 0)).fillna(0.0)
 
-    @property
+    @cached_property
     def discharger_heat_efficiency(self) -> xr.DataArray:
         """
         Direct (above-return) heat delivered to DH per m3 discharged [MWh/m3],
@@ -377,7 +378,7 @@ class PtesApproximator:
         )
         return self.rho * self.c_p * drop
 
-    @property
+    @cached_property
     def resistive_boost_per_m3(self) -> xr.DataArray:
         """
         Resistive boost heat required per m3 discharged [MWh/m3], dims
@@ -401,7 +402,7 @@ class PtesApproximator:
         )
         return boost.where(self.discharger_heat_efficiency > 0, 0.0)
 
-    @property
+    @cached_property
     def charger_efficiency_by_source(self) -> xr.DataArray:
         """
         Volume gained per unit DH heat for the volume-trade charger [m3/MWh].
@@ -417,7 +418,7 @@ class PtesApproximator:
         delta = dest - source
         return (1.0 / delta.where(delta > 0)).fillna(0.0)
 
-    @property
+    @cached_property
     def charger_validity(self) -> xr.DataArray:
         """
         Boolean mask of which volume-trade chargers to wire, dims
@@ -438,7 +439,7 @@ class PtesApproximator:
         t_source = self.layer_temperatures_da.rename({"layer": "layer_source"})
         return dest_available & (t_source < t_dest)
 
-    @property
+    @cached_property
     def standing_losses(self) -> np.ndarray:
         """Per-layer standing-loss design value [-]."""
         return np.full(self.num_layers, self.design_standing_losses)
@@ -452,12 +453,12 @@ class PtesApproximator:
     # No volume, no per-layer bookkeeping.
     # ------------------------------------------------------------------
 
-    @property
+    @cached_property
     def simple_needs_boosting(self) -> xr.DataArray:
         """Binary indicator that forward T exceeds the store top T. Dims ``(time, name)``."""
         return xr.where(self.forward_temperature > self.top_temperature, 1, 0)
 
-    @property
+    @cached_property
     def simple_discharger_direct_efficiency(self) -> xr.DataArray:
         """
         Fraction of the store debit delivered directly to DH on discharge, dims
@@ -475,12 +476,12 @@ class PtesApproximator:
         boosting_direct = (direct_drop / total.where(total > 0)).fillna(1.0)
         return xr.where(self.simple_needs_boosting == 1, boosting_direct, 1.0)
 
-    @property
+    @cached_property
     def simple_discharger_hp_efficiency(self) -> xr.DataArray:
         """Fraction of the store debit routed to the booster HP. Dims ``(time, name)``."""
         return 1.0 - self.simple_discharger_direct_efficiency
 
-    @property
+    @cached_property
     def simple_hp_cop(self) -> xr.DataArray:
         """
         COP of the simple-model booster HP, dims ``(time, name)``. Lifts the DH
@@ -496,12 +497,12 @@ class PtesApproximator:
             source_outlet=source_inlet - self.booster_source_dt,
         )
 
-    @property
+    @cached_property
     def simple_hp_elec_efficiency(self) -> xr.DataArray:
         """Electricity drawn per unit heat delivered by the simple HP (``1/COP``)."""
         return 1.0 / self.simple_hp_cop.clip(min=1.0 + 1e-3)
 
-    @property
+    @cached_property
     def simple_hp_input_efficiency(self) -> xr.DataArray:
         """
         Store heat drawn from the hp-input bus per unit heat delivered by the
@@ -510,7 +511,7 @@ class PtesApproximator:
         cop = self.simple_hp_cop.clip(min=1.0 + 1e-3)
         return (cop - 1.0) / cop
 
-    @property
+    @cached_property
     def simple_resistive_boost_per_discharge(self) -> xr.DataArray:
         """
         Resistive boost heat required per unit store discharge [-], dims

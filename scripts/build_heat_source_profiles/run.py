@@ -457,6 +457,10 @@ if __name__ == "__main__":
         heat_source=pd.Index([], name="heat_source")
     ).isel(heat_source=slice(0, 0))
 
+    # Sources appear in several heat systems and again in the boosting
+    # profiles below; load each temperature (file) only once.
+    source_temperatures: dict[str, float | xr.DataArray] = {}
+
     cop_all_system_types = []
     cooling_all_system_types = []
     for heat_system_type, heat_sources in heat_sources_by_system.items():
@@ -468,11 +472,13 @@ if __name__ == "__main__":
         cop_this_system_type = []
         cooling_this_system_type = []
         for heat_source_name in heat_sources:
-            source_temperature_celsius = get_source_temperature(
-                snakemake_params=snakemake.params,
-                snakemake_input=snakemake.input,
-                heat_source_name=heat_source_name,
-            )
+            if heat_source_name not in source_temperatures:
+                source_temperatures[heat_source_name] = get_source_temperature(
+                    snakemake_params=snakemake.params,
+                    snakemake_input=snakemake.input,
+                    heat_source_name=heat_source_name,
+                )
+            source_temperature_celsius = source_temperatures[heat_source_name]
 
             source_inlet_temperature_celsius = get_source_inlet_temperature(
                 source_temperature=source_temperature_celsius,
@@ -570,11 +576,7 @@ if __name__ == "__main__":
         boosting_profiles = xr.concat(
             [
                 get_boosting_profile(
-                    source_temperature=get_source_temperature(
-                        snakemake_params=snakemake.params,
-                        snakemake_input=snakemake.input,
-                        heat_source_name=heat_source_key,
-                    ),
+                    source_temperature=source_temperatures[heat_source_key],
                     forward_temperature=central_heating_forward_temperature,
                     return_temperature=central_heating_return_temperature,
                     heat_pump_cooling=central_heat_pump_cooling[heat_source_key],
