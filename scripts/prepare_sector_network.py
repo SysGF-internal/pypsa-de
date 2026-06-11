@@ -3928,21 +3928,21 @@ def add_heat(
 
             costs_name_heat_pump = heat_system.heat_pump_costs_name(heat_source)
 
-            cop_heat_pump = (
-                (
-                    cop.sel(
-                        heat_system=heat_system.system_type.value,
-                        heat_source=heat_source.value,
-                        name=this_heat_source_nodes,
-                    )
-                    .transpose("time", "name")
-                    .to_pandas()
-                    if options["time_dep_hp_cop"]
-                    else costs.loc[[costs_name_heat_pump], ["efficiency"]]
+            # The COP approximator returns 0 for infeasible operating points
+            # (lift below min_delta_t_lift); keep the raw values to disable the
+            # heat pump there, and a clipped copy for the link efficiencies.
+            cop_heat_pump_raw = (
+                cop.sel(
+                    heat_system=heat_system.system_type.value,
+                    heat_source=heat_source.value,
+                    name=this_heat_source_nodes,
                 )
-                .clip(lower=0.001)
-                .squeeze()
-            )
+                .transpose("time", "name")
+                .to_pandas()
+                if options["time_dep_hp_cop"]
+                else costs.loc[[costs_name_heat_pump], ["efficiency"]]
+            ).squeeze()
+            cop_heat_pump = cop_heat_pump_raw.clip(lower=0.001)
 
             heat_carrier = heat_source.heat_carrier(heat_system)
 
@@ -4068,7 +4068,7 @@ def add_heat(
                         ]
                     )
                     > 1
-                    else -(cop_heat_pump > 0).astype(float)
+                    else -(cop_heat_pump_raw > 0).astype(float)
                 )
 
                 n.add(
