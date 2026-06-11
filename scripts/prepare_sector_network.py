@@ -3343,6 +3343,16 @@ def add_heat(
             energy_to_power_ratio_water_pit = costs.at[
                 "central water pit storage", "energy to power ratio"
             ]
+            # Conversion efficiencies from the cost database (currently 1.0,
+            # but kept as a hook should the technology data change). They scale
+            # the heat side of the chargers/dischargers; volume channels stay
+            # mass-conserving.
+            water_pit_charger_efficiency = costs.at[
+                "central water pit charger", "efficiency"
+            ]
+            water_pit_discharger_efficiency = costs.at[
+                "central water pit discharger", "efficiency"
+            ]
             # Capacity scaling against the design temperature spread: a scalar
             # for constant top/bottom temperatures, or a (time, name) profile
             # when 'forward'/'return' dynamic temperatures are configured.
@@ -3441,10 +3451,16 @@ def add_heat(
                         valid_nodes = heat_nodes[valid.to_numpy()]
                         if valid_nodes.empty:
                             continue
-                        charger_efficiency = float(
-                            ptes_ds["charger_efficiency_by_source"].sel(
-                                layer_dest=layer, layer_source=source
+                        # Scaling both volume channels by the charger efficiency
+                        # keeps the layer trade mass-conserving; the loss shows
+                        # up as less volume raised per MWh of heat drawn.
+                        charger_efficiency = (
+                            float(
+                                ptes_ds["charger_efficiency_by_source"].sel(
+                                    layer_dest=layer, layer_source=source
+                                )
                             )
+                            * water_pit_charger_efficiency
                         )
                         charger_name = (
                             valid_nodes
@@ -3497,7 +3513,7 @@ def add_heat(
                             .sel(layer=layer)
                             .to_pandas()
                             .reindex(heat_nodes)
-                        )
+                        ) * water_pit_discharger_efficiency
                         return_layer_bus = (
                             heat_nodes
                             + f" {heat_system} water pits layer "
@@ -3749,7 +3765,7 @@ def add_heat(
                     lifetime=costs.at["central water pit storage", "lifetime"],
                 )
 
-                # Charger: UCH heat -> store (1 MWh stored per MWh DH heat).
+                # Charger: UCH heat -> store.
                 charger_name = heat_nodes + f" {heat_system} water pits charger"
                 n.add(
                     "Link",
@@ -3757,7 +3773,7 @@ def add_heat(
                     suffix=f" {heat_system} water pits charger",
                     bus0=heat_nodes + f" {heat_system} heat",
                     bus1=heat_nodes + f" {heat_system} water pits",
-                    efficiency=1.0,
+                    efficiency=water_pit_charger_efficiency,
                     carrier=f"{heat_system} water pits charger",
                     p_nom_extendable=True,
                     lifetime=costs.at["central water pit storage", "lifetime"],
@@ -3809,7 +3825,7 @@ def add_heat(
                     bus0=heat_nodes + f" {heat_system} water pits",
                     bus1=heat_nodes + f" {heat_system} heat",
                     bus2=boost_bus,
-                    efficiency=direct_efficiency,
+                    efficiency=water_pit_discharger_efficiency * direct_efficiency,
                     efficiency2=boost_efficiency,
                     carrier=f"{heat_system} water pits discharger",
                     marginal_cost=costs.at[
