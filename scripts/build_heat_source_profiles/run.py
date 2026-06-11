@@ -52,9 +52,8 @@ Inputs
 - ``resources/<run_name>/central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc``
 - ``resources/<run_name>/central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc``
 - ``resources/<run_name>/temp_<source>_total_base_s_{clusters}.nc``: temperature
-  profiles of variable-temperature heat sources.
-- ``resources/<run_name>/ptes_operations_base_s_{clusters}_{planning_horizons}.nc``
-  (if PTES is enabled).
+  profiles of variable-temperature heat sources. PTES layer temperatures come
+  from config (``ptes.layered.layer_temperatures``), not from an input file.
 
 Outputs
 -------

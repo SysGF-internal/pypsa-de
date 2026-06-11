@@ -663,7 +663,6 @@ sector:
       clip_forward_temperature: null
     ptes:
       enable: true
-      charge_boosting_required: false
       discharge_resistive_boosting: false
       # Constant temperatures [°C], or 'forward'/'return' to follow the DH
       # network profiles dynamically (top clipped to design_top_temperature).

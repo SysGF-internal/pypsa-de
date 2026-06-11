@@ -136,17 +136,17 @@ class _PtesConfig(BaseModel):
         "('forward'/'return') top/bottom temperatures, where the capacity "
         "scaling follows the district heating network temperatures.",
     )
-    charge_boosting_required: bool = Field(
-        False,
-        description="Deprecated. Not implemented.",
-    )
     discharge_resistive_boosting: bool = Field(
         False,
-        description="If True, enables boosting by resistive heaters instead of heat pumps. "
-        "`prepare_sector_network` then adds the links `<node> urban central water pits resistive booster` "
-        "and `<node> urban central water pits resistive heater stand-alone` and reroutes heat generation "
-        "from resistive heaters accordingly. The required boosting energy is computed in `build_ptes_operations` "
-        "as `ptes_boost_per_discharge_profiles_base_s<nodes>_<year>.nc`.",
+        description="If True, discharge boosting uses the dual-use resistive heater "
+        "instead of booster heat pumps. Requires sector.resistive_heaters. "
+        "`prepare_sector_network` then routes the heater output through a "
+        "resistive-heat bus with two routing links (stand-alone DH supply and "
+        "`<node> urban central water pits resistive booster`); the dischargers "
+        "inject their boost energy demand b * p_discharge, with "
+        "b = (T_forward - T_layer) / (T_layer - T_return), onto a per-node "
+        "boost-demand bus that the booster must serve. The boost terms are "
+        "pre-computed in `build_ptes_operations`.",
     )
     top_temperature: float | Literal["forward"] = Field(
         90,

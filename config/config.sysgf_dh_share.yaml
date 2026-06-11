@@ -135,7 +135,6 @@ sector:
     ptes:
       enable: true
       dynamic_capacity: false
-      charge_boosting_required: false
       discharge_resistive_boosting: false
       top_temperature: 90
       bottom_temperature: 35

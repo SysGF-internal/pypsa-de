@@ -19,11 +19,11 @@ Relevant Settings
         district_heating:
             ptes:
                 enable: true
-                top_temperature: 90
-                bottom_temperature: 35
+                top_temperature: 90       # or 'forward' for a dynamic profile
+                bottom_temperature: 35    # or 'return' for a dynamic profile
                 design_top_temperature: 90
                 design_bottom_temperature: 35
-                discharge_resistive_boosting: false
+                booster_source_dt: 6
                 layered:
                     layer_temperatures: [90]
 
@@ -34,8 +34,10 @@ Inputs
 
 Outputs
 -------
-- ``resources/<run_name>/ptes_layered_params_base_s_{clusters}_{planning_horizons}.nc``
-    Pre-computed parameter dataset for the PTES model.
+- ``resources/<run_name>/ptes_operations_base_s_{clusters}_{planning_horizons}.nc``
+    Pre-computed parameter dataset for the PTES model (layer temperatures,
+    charger/discharger efficiencies, booster terms, e_max_pu), consumed by
+    ``prepare_sector_network`` and the layered constraints in ``solve_network``.
 
 References
 ----------
