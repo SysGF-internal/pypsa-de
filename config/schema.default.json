@@ -4297,9 +4297,14 @@
                   "description": "Enable PTES. The function `add_heat()` in `prepare_sector_network` then adds the stores `<node> urban central water pits` as well as the links `<node> urban central water pits charger` and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
                   "type": "boolean"
                 },
+                "temperature_dependent_capacity": {
+                  "default": false,
+                  "description": "If True, the energy-only store capacity is scaled by the operating vs design temperature spread: e_max_pu = (top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature), a time-varying profile with dynamic ('forward'/'return') temperatures. If False, e_max_pu = 1 (legacy behaviour: capacity independent of network temperatures and boosting technology). The layered volume model ignores this setting.",
+                  "type": "boolean"
+                },
                 "dynamic_capacity": {
                   "default": false,
-                  "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Only meaningful with dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
+                  "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Requires temperature_dependent_capacity and dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
                   "type": "boolean"
                 },
                 "discharge_resistive_boosting": {
@@ -6520,9 +6525,14 @@
               "description": "Enable PTES. The function `add_heat()` in `prepare_sector_network` then adds the stores `<node> urban central water pits` as well as the links `<node> urban central water pits charger` and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
               "type": "boolean"
             },
+            "temperature_dependent_capacity": {
+              "default": false,
+              "description": "If True, the energy-only store capacity is scaled by the operating vs design temperature spread: e_max_pu = (top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature), a time-varying profile with dynamic ('forward'/'return') temperatures. If False, e_max_pu = 1 (legacy behaviour: capacity independent of network temperatures and boosting technology). The layered volume model ignores this setting.",
+              "type": "boolean"
+            },
             "dynamic_capacity": {
               "default": false,
-              "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Only meaningful with dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
+              "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Requires temperature_dependent_capacity and dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
               "type": "boolean"
             },
             "discharge_resistive_boosting": {
@@ -7769,9 +7779,14 @@
           "description": "Enable PTES. The function `add_heat()` in `prepare_sector_network` then adds the stores `<node> urban central water pits` as well as the links `<node> urban central water pits charger` and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
           "type": "boolean"
         },
+        "temperature_dependent_capacity": {
+          "default": false,
+          "description": "If True, the energy-only store capacity is scaled by the operating vs design temperature spread: e_max_pu = (top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature), a time-varying profile with dynamic ('forward'/'return') temperatures. If False, e_max_pu = 1 (legacy behaviour: capacity independent of network temperatures and boosting technology). The layered volume model ignores this setting.",
+          "type": "boolean"
+        },
         "dynamic_capacity": {
           "default": false,
-          "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Only meaningful with dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
+          "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Requires temperature_dependent_capacity and dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
           "type": "boolean"
         },
         "discharge_resistive_boosting": {
@@ -11123,9 +11138,14 @@
                   "description": "Enable PTES. The function `add_heat()` in `prepare_sector_network` then adds the stores `<node> urban central water pits` as well as the links `<node> urban central water pits charger` and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
                   "type": "boolean"
                 },
+                "temperature_dependent_capacity": {
+                  "default": false,
+                  "description": "If True, the energy-only store capacity is scaled by the operating vs design temperature spread: e_max_pu = (top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature), a time-varying profile with dynamic ('forward'/'return') temperatures. If False, e_max_pu = 1 (legacy behaviour: capacity independent of network temperatures and boosting technology). The layered volume model ignores this setting.",
+                  "type": "boolean"
+                },
                 "dynamic_capacity": {
                   "default": false,
-                  "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Only meaningful with dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
+                  "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Requires temperature_dependent_capacity and dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
                   "type": "boolean"
                 },
                 "discharge_resistive_boosting": {

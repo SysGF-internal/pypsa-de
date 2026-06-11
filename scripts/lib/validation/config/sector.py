@@ -129,12 +129,24 @@ class _PtesConfig(BaseModel):
         "`<node> urban central water pits` as well as the links `<node> urban central water pits charger` "
         "and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
     )
+    temperature_dependent_capacity: bool = Field(
+        False,
+        description="If True, the energy-only store capacity is scaled by the "
+        "operating vs design temperature spread: "
+        "e_max_pu = (top_temperature - bottom_temperature) / "
+        "(design_top_temperature - design_bottom_temperature), a time-varying "
+        "profile with dynamic ('forward'/'return') temperatures. If False, "
+        "e_max_pu = 1 (legacy behaviour: capacity independent of network "
+        "temperatures and boosting technology). The layered volume model "
+        "ignores this setting.",
+    )
     dynamic_capacity: bool = Field(
         False,
         description="Carry the time-varying e_max_pu profile over between myopic "
-        "planning horizons in `add_brownfield`. Only meaningful with dynamic "
-        "('forward'/'return') top/bottom temperatures, where the capacity "
-        "scaling follows the district heating network temperatures.",
+        "planning horizons in `add_brownfield`. Requires "
+        "temperature_dependent_capacity and dynamic ('forward'/'return') "
+        "top/bottom temperatures, where the capacity scaling follows the "
+        "district heating network temperatures.",
     )
     discharge_resistive_boosting: bool = Field(
         False,
@@ -247,11 +259,14 @@ class _PtesConfig(BaseModel):
                 "supported by the layered volume model (>= 3 layer_temperatures); "
                 "layer temperatures are fixed constants"
             )
-        if self.dynamic_capacity and not dynamic_temperatures:
+        if self.dynamic_capacity and not (
+            dynamic_temperatures and self.temperature_dependent_capacity
+        ):
             raise ValueError(
-                "district_heating.ptes.dynamic_capacity requires dynamic "
-                "top/bottom temperatures ('forward'/'return'); with constant "
-                "temperatures the capacity scaling is static"
+                "district_heating.ptes.dynamic_capacity requires "
+                "temperature_dependent_capacity and dynamic top/bottom "
+                "temperatures ('forward'/'return'); otherwise the capacity "
+                "scaling is static"
             )
         return self
 

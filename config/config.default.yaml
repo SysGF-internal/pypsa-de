@@ -664,14 +664,20 @@ sector:
     ptes:
       enable: true
       discharge_resistive_boosting: false
+      # Scale the energy-only store capacity by the operating vs design
+      # temperature spread (e_max_pu). false keeps the legacy behaviour
+      # (e_max_pu = 1, capacity independent of network temperatures).
+      temperature_dependent_capacity: false
       # Constant temperatures [°C], or 'forward'/'return' to follow the DH
       # network profiles dynamically (top clipped to design_top_temperature).
-      # With dynamic temperatures the capacity scaling e_max_pu becomes a
-      # time-varying profile (simple energy-only model only).
+      # With dynamic temperatures and temperature_dependent_capacity the
+      # e_max_pu scaling becomes a time-varying profile (simple energy-only
+      # model only).
       top_temperature: 90
       bottom_temperature: 35
       # Carry the time-varying e_max_pu profile over between myopic horizons
-      # in add_brownfield (only meaningful with dynamic temperatures).
+      # in add_brownfield (only meaningful with dynamic temperatures and
+      # temperature_dependent_capacity).
       dynamic_capacity: false
       design_top_temperature: 90
       design_bottom_temperature: 35

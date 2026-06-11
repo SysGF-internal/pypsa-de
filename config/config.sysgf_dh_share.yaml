@@ -136,6 +136,7 @@ sector:
       enable: true
       dynamic_capacity: false
       discharge_resistive_boosting: false
+      temperature_dependent_capacity: false
       top_temperature: 90
       bottom_temperature: 35
       design_top_temperature: 90

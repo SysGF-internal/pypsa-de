@@ -19,6 +19,7 @@ Relevant Settings
         district_heating:
             ptes:
                 enable: true
+                temperature_dependent_capacity: false
                 top_temperature: 90       # or 'forward' for a dynamic profile
                 bottom_temperature: 35    # or 'return' for a dynamic profile
                 design_top_temperature: 90
@@ -88,6 +89,7 @@ if __name__ == "__main__":
         design_standing_losses=0.0,  # placeholder; actual value set from costs data
         cop_approximation_params=snakemake.params.heat_pump_cop_approximation,
         booster_source_dt=snakemake.params.booster_source_dt,
+        temperature_dependent_capacity=snakemake.params.temperature_dependent_capacity,
     )
 
     # Write single dataset with all pre-computed PTES parameters

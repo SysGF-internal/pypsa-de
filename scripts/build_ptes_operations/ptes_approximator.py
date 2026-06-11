@@ -33,6 +33,7 @@ class PtesApproximator:
         design_standing_losses: float,
         cop_approximation_params: dict,
         booster_source_dt: float,
+        temperature_dependent_capacity: bool = False,
         rho=1000,
         # Specific heat in MWh/kg/K to keep rho*c_p*DeltaT in MWh/m3.
         c_p=4184 / 3.6e9,
@@ -87,6 +88,7 @@ class PtesApproximator:
         self.design_standing_losses = design_standing_losses
         self.cop_approximation_params = cop_approximation_params
         self.booster_source_dt = booster_source_dt
+        self.temperature_dependent_capacity = temperature_dependent_capacity
         self.rho = rho
         self.c_p = c_p
 
@@ -172,15 +174,21 @@ class PtesApproximator:
         """
         PTES capacity scaling against the design temperature spread.
 
-        A scalar for constant top/bottom temperatures; a (time, name) profile
-        when 'forward'/'return' dynamic temperatures are configured, so the
-        usable capacity follows the district heating network temperatures.
+        1.0 when ``temperature_dependent_capacity`` is disabled (legacy
+        behaviour: capacity independent of network temperatures and boosting
+        technology). Otherwise the operating vs design spread ratio: a scalar
+        for constant top/bottom temperatures, or a (time, name) profile when
+        'forward'/'return' dynamic temperatures are configured, so the usable
+        capacity follows the district heating network temperatures.
         """
         design_delta_t = self.design_top_temperature - self.design_bottom_temperature
         if design_delta_t <= 0:
             raise ValueError(
                 "design_top_temperature must be larger than design_bottom_temperature"
             )
+
+        if not self.temperature_dependent_capacity:
+            return 1.0
 
         ratio = (self.top_temperature - self.bottom_temperature) / design_delta_t
         if isinstance(ratio, xr.DataArray):

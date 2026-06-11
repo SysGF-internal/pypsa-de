@@ -880,6 +880,9 @@ rule build_ptes_operations:
             "bottom_temperature",
         ),
         snapshots=config_provider("snapshots"),
+        temperature_dependent_capacity=config_provider(
+            "sector", "district_heating", "ptes", "temperature_dependent_capacity"
+        ),
         design_top_temperature=config_provider(
             "sector",
             "district_heating",
