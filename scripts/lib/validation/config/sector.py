@@ -81,6 +81,39 @@ class _SubnodesConfig(BaseModel):
         return v
 
 
+class _PtesLayeredConfig(BaseModel):
+    """Configuration for `sector.district_heating.ptes.layered` settings."""
+
+    enable: bool = Field(
+        False,
+        description="Gate the per-layer heat-source COP expansion in "
+        "`build_heat_source_profiles`. The layered volume model itself is "
+        "selected by the number of layer_temperatures (>= 3).",
+    )
+    layer_temperatures: list[float] = Field(
+        default_factory=lambda: [90.0],
+        description="Fixed layer temperatures in °C, hottest first. One value "
+        "keeps the simple energy-only model; three or more select the layered "
+        "volume model.",
+    )
+
+    @field_validator("layer_temperatures")
+    @classmethod
+    def validate_layer_temperatures(cls, v: list[float]) -> list[float]:
+        if not v:
+            raise ValueError("layer_temperatures must not be empty")
+        if len(v) > 10:
+            raise ValueError(
+                "at most 10 layer_temperatures are supported "
+                "(HeatSource defines layers 'ptes layer 0' .. 'ptes layer 9')"
+            )
+        if any(a <= b for a, b in zip(v, v[1:])):
+            raise ValueError(
+                "layer_temperatures must be strictly decreasing (hottest first)"
+            )
+        return v
+
+
 class _PtesConfig(BaseModel):
     """
     Configuration for `sector.district_heating.ptes` settings.
@@ -144,11 +177,8 @@ class _PtesConfig(BaseModel):
         "below the HP inlet the discharged volume is cooled across the evaporator. "
         "Sets the COP source-outlet and the deposit-layer target. See `build_ptes_operations`.",
     )
-    layered: dict[str, Any] = Field(
-        default_factory=lambda: {
-            "enable": False,
-            "layer_temperatures": [90],
-        },
+    layered: "_PtesLayeredConfig" = Field(
+        default_factory=lambda: _PtesLayeredConfig(),
         description="Layered PTES volume model settings. The layered model is used when >= 3 "
         "layer_temperatures are given; fewer layers fall back to the simple energy-only model. "
         "The enable flag gates the per-layer heat-source COP expansion in `build_heat_source_profiles`.",
@@ -198,6 +228,30 @@ class _PtesConfig(BaseModel):
             raise ValueError(
                 f"design_top_temperature ({self.design_top_temperature}) must be >= "
                 f"design_bottom_temperature ({self.design_bottom_temperature})"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_consistency(self):
+        dynamic_temperatures = isinstance(self.top_temperature, str) or isinstance(
+            self.bottom_temperature, str
+        )
+        if self.layered.enable and not self.enable:
+            raise ValueError(
+                "district_heating.ptes.layered.enable requires "
+                "district_heating.ptes.enable"
+            )
+        if len(self.layered.layer_temperatures) >= 3 and dynamic_temperatures:
+            raise ValueError(
+                "dynamic top/bottom temperatures ('forward'/'return') are not "
+                "supported by the layered volume model (>= 3 layer_temperatures); "
+                "layer temperatures are fixed constants"
+            )
+        if self.dynamic_capacity and not dynamic_temperatures:
+            raise ValueError(
+                "district_heating.ptes.dynamic_capacity requires dynamic "
+                "top/bottom temperatures ('forward'/'return'); with constant "
+                "temperatures the capacity scaling is static"
             )
         return self
 

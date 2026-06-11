@@ -3339,6 +3339,9 @@ def add_heat(
         ):
             ptes_ds = xr.open_dataset(ptes_operations_file)
             num_layers = int(ptes_ds.attrs["num_layers"])
+            # Model selection is made by the approximator (build_ptes_operations)
+            # and read back here, so the threshold lives in one place.
+            ptes_is_layered = bool(ptes_ds.attrs["is_layered"])
 
             energy_to_power_ratio_water_pit = costs.at[
                 "central water pit storage", "energy to power ratio"
@@ -3399,7 +3402,7 @@ def add_heat(
                     unit="MWh",
                 )
 
-            if num_layers >= 3:
+            if ptes_is_layered:
                 # ============================================================
                 # Layered volume model (>= 3 layers): per-layer m3 stores,
                 # volume-trade chargers, a discharger multilink and -- depending

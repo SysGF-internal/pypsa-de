@@ -2050,6 +2050,26 @@
               "type": "string"
             }
           }
+        },
+        "lake_data": {
+          "description": "Configuration for a single data source.",
+          "properties": {
+            "source": {
+              "default": "archive",
+              "description": "Source of the data. 'archive' retrieves pre-built data, 'primary' retrieves from primary source.",
+              "enum": [
+                "archive",
+                "primary",
+                "build"
+              ],
+              "type": "string"
+            },
+            "version": {
+              "default": "latest",
+              "description": "Version of the data to use. Uses the specific 'version' for the selected 'source' or the dataset tagged 'latest' for this source.",
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -2422,6 +2442,44 @@
       ],
       "type": "string"
     },
+    "HeatSource": {
+      "description": "Enumeration representing different heat sources for heat pumps and utilisation.\n\nHeat sources are categorized by their characteristics:\n\n**Inexhaustible sources** (AIR, GROUND, SEA_WATER):\n    Always available, no resource bus needed, heat pump draws from ambient.\n\n**Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, PTES):\n    Have spatial/temporal constraints, require resource tracking via buses.\n    A utilisation link splits source heat into direct DH contribution\n    (fraction 1 \u2212 b) and HP input (fraction b), where b is the\n    boosting share from ``build_heat_source_profiles``.\n\nAttributes\n----------\nGEOTHERMAL : str\n    Geothermal heat source with constant temperature.\nRIVER_WATER : str\n    River water heat source with time-varying temperature.\nSEA_WATER : str\n    Sea water heat source (treated as inexhaustible).\nAIR : str\n    Ambient air heat source (inexhaustible).\nGROUND : str\n    Ground/soil heat source (inexhaustible).\nPTES : str\n    Pit Thermal Energy Storage discharge as heat source.\n\nSee Also\n--------\nHeatSystem : Defines heat system types (urban central, urban decentral, rural).\nbuild_heat_source_profiles : Calculates COP, boosting share and cooling profiles.",
+      "enum": [
+        "geothermal",
+        "river_water",
+        "sea_water",
+        "lake_water",
+        "air",
+        "ground",
+        "ptes",
+        "ptes layer 0",
+        "ptes layer 1",
+        "ptes layer 2",
+        "ptes layer 3",
+        "ptes layer 4",
+        "ptes layer 5",
+        "ptes layer 6",
+        "ptes layer 7",
+        "ptes layer 8",
+        "ptes layer 9",
+        "electrolysis_waste",
+        "fischer_tropsch_waste",
+        "sabatier_waste",
+        "haber_bosch_waste",
+        "methanolisation_waste",
+        "fuel_cell_waste"
+      ],
+      "type": "string"
+    },
+    "HeatSystemType": {
+      "description": "Enumeration representing different types of heat systems.",
+      "enum": [
+        "urban central",
+        "urban decentral",
+        "rural"
+      ],
+      "type": "string"
+    },
     "IndustryConfig": {
       "description": "Configuration for `industry` settings.",
       "properties": {
@@ -2523,9 +2581,19 @@
           "type": "object"
         },
         "HVC_environment_sequestration_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            }
+          ],
           "default": 0.0,
-          "description": "The fraction of high value chemicals (HVC) put into landfill resulting in additional carbon sequestration. The default value is 0.",
-          "type": "number"
+          "description": "The fraction of high value chemicals (HVC) put into landfill resulting in additional carbon sequestration. The default value is 0."
         },
         "waste_to_energy": {
           "default": false,
@@ -3001,6 +3069,13 @@
                         "type": "string"
                       },
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "object"
                     }
                   ],
                   "description": "Specifies the turbine type and its characteristic power curve. Can be a string or a dictionary with years as keys which denote the year another turbine model becomes available."
@@ -3135,6 +3210,13 @@
                     {
                       "additionalProperties": {
                         "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": {
+                        "additionalProperties": true,
+                        "type": "object"
                       },
                       "type": "object"
                     }
@@ -3320,6 +3402,13 @@
                         "type": "string"
                       },
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "object"
                     }
                   ],
                   "description": "Specifies the turbine type and its characteristic power curve. Can be a string or a dictionary with years as keys which denote the year another turbine model becomes available."
@@ -3501,6 +3590,13 @@
                     {
                       "additionalProperties": {
                         "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": {
+                        "additionalProperties": true,
+                        "type": "object"
                       },
                       "type": "object"
                     }
@@ -4193,9 +4289,96 @@
               "type": "object"
             },
             "ptes": {
-              "additionalProperties": true,
-              "description": "Pit thermal energy storage settings.",
-              "type": "object"
+              "description": "Configuration for `sector.district_heating.ptes` settings.\n\nPit thermal energy storage [PTES] settings. PTES is used only in district heating.\nSee `prepare_sector_network <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-prepare_sector_network>`_\nand `build_ptes_operations <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-build_ptes_operations>`_.",
+              "markdownDescription": "Configuration for `sector.district_heating.ptes` settings.\n\nPit thermal energy storage [PTES] settings. PTES is used only in district heating.\nSee [prepare_sector_network ](https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-prepare_sector_network)\nand [build_ptes_operations ](https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-build_ptes_operations).",
+              "properties": {
+                "enable": {
+                  "default": true,
+                  "description": "Enable PTES. The function `add_heat()` in `prepare_sector_network` then adds the stores `<node> urban central water pits` as well as the links `<node> urban central water pits charger` and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
+                  "type": "boolean"
+                },
+                "dynamic_capacity": {
+                  "default": false,
+                  "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Only meaningful with dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
+                  "type": "boolean"
+                },
+                "charge_boosting_required": {
+                  "default": false,
+                  "description": "Deprecated. Not implemented.",
+                  "type": "boolean"
+                },
+                "discharge_resistive_boosting": {
+                  "default": false,
+                  "description": "If True, enables boosting by resistive heaters instead of heat pumps. `prepare_sector_network` then adds the links `<node> urban central water pits resistive booster` and `<node> urban central water pits resistive heater stand-alone` and reroutes heat generation from resistive heaters accordingly. The required boosting energy is computed in `build_ptes_operations` as `ptes_boost_per_discharge_profiles_base_s<nodes>_<year>.nc`.",
+                  "type": "boolean"
+                },
+                "top_temperature": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "const": "forward",
+                      "type": "string"
+                    }
+                  ],
+                  "default": 90,
+                  "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
+                },
+                "bottom_temperature": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "const": "return",
+                      "type": "string"
+                    }
+                  ],
+                  "default": 35,
+                  "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
+                },
+                "design_top_temperature": {
+                  "default": 90,
+                  "description": "Design top temperature in \u00b0C for capacity calculation.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "design_bottom_temperature": {
+                  "default": 35,
+                  "description": "Design bottom temperature in \u00b0C for capacity calculation.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "booster_source_dt": {
+                  "default": 6,
+                  "description": "Source-side temperature drop \u0394T in K of the PTES booster heat pump: how far below the HP inlet the discharged volume is cooled across the evaporator. Sets the COP source-outlet and the deposit-layer target. See `build_ptes_operations`.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "layered": {
+                  "description": "Configuration for `sector.district_heating.ptes.layered` settings.",
+                  "properties": {
+                    "enable": {
+                      "default": false,
+                      "description": "Gate the per-layer heat-source COP expansion in `build_heat_source_profiles`. The layered volume model itself is selected by the number of layer_temperatures (>= 3).",
+                      "type": "boolean"
+                    },
+                    "layer_temperatures": {
+                      "description": "Fixed layer temperatures in \u00b0C, hottest first. One value keeps the simple energy-only model; three or more select the layered volume model.",
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    }
+                  }
+                },
+                "potential_limit": {
+                  "additionalProperties": true,
+                  "description": "Optional PTES energy-capacity limits derived from eligible land within district-heating areas.",
+                  "type": "object"
+                }
+              }
             },
             "ates": {
               "additionalProperties": true,
@@ -4204,38 +4387,45 @@
             },
             "heat_source_cooling": {
               "default": 6,
-              "description": "Cooling of heat source for heat pumps.",
+              "description": "Cooling of heat source for heat pumps [K]. For preheating central sources this is the starting guess of the iterative solve (see heat_pump_cooling_iterative); for all other sources it is the flat cooling value.",
               "type": "number"
+            },
+            "heat_pump_cooling_iterative": {
+              "default": true,
+              "description": "Solve the source-side cooling and the COP consistently for preheating central heat sources via fixed-point (Picard) iteration of dT_cool = (COP - 1)/COP * (T_forward - T_source). If False, the flat heat_source_cooling value is used for all sources.",
+              "type": "boolean"
+            },
+            "log_heat_pump_cooling_iterations": {
+              "default": false,
+              "description": "Debugging aid: write the full per-node, per-timestep, per-iteration cooling/COP trace of the iterative solve to heat_pump_cooling_iterations_<...>.csv alongside the COP profiles.",
+              "type": "boolean"
             },
             "heat_pump_cop_approximation": {
               "additionalProperties": true,
               "description": "Heat pump COP approximation settings.",
               "type": "object"
             },
-            "limited_heat_sources": {
-              "additionalProperties": true,
-              "description": "Dictionary with names of limited heat sources (not air). Must be `river_water` / `geothermal` or another heat source in `Manz et al. 2024 <https://www.sciencedirect.com/science/article/pii/S0960148124001769>`_.",
-              "markdownDescription": "Dictionary with names of limited heat sources (not air). Must be `river_water` / `geothermal` or another heat source in [Manz et al. 2024 ](https://www.sciencedirect.com/science/article/pii/S0960148124001769).",
-              "type": "object"
-            },
-            "direct_utilisation_heat_sources": {
-              "description": "List of heat sources for direct heat utilisation in district heating. Must be in the keys of `heat_utilisation_potentials` (e.g. `geothermal`).",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "temperature_limited_stores": {
-              "description": "List of names for stores used as limited heat sources.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
             "dh_areas": {
               "additionalProperties": true,
               "description": "District heating areas settings.",
               "type": "object"
+            },
+            "ignore_missing_geothermal_data": {
+              "default": false,
+              "description": "If true, missing geothermal data for non-EU countries will be ignored. If false, an error will be raised if countries with missing data are modelled while geothermal heat is included as a heat source.",
+              "type": "boolean"
+            },
+            "heat_source_temperatures": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "description": "Assumed constant temperatures (\u00b0C) of heat sources used for district heating. When a heat source is included in `heat_sources`, its temperature determines whether heat can be used directly (T_source > T_forward), the ratio for preheating (T_return < T_source < T_forward), or boosting via heat pumps.",
+              "type": "object"
+            },
+            "fallback_ptx_heat_losses": {
+              "default": 0.05,
+              "description": "Assumed fractional heat loss for PtX processes whose technology data does not provide an explicit heat output efficiency (currently Sabatier and H2 Fuel Cell). For these processes the waste heat efficiency is calculated as ``1 - fallback_ptx_heat_losses - main_efficiency`` with `main_efficiency` referring to the `efficiency` field in the cost data. See ``HeatSource.get_waste_heat_efficiency()`` in ``scripts/definitions/heat_source.py`` and ``add_waste_heat()`` in ``scripts/prepare_sector_network.py``.",
+              "type": "number"
             },
             "subnodes": {
               "description": "Configuration for `sector.district_heating.subnodes` settings.",
@@ -4251,17 +4441,16 @@
                   "type": "integer"
                 },
                 "demand_share": {
-                  "default": null,
-                  "description": "Cumulative district heating demand share to represent explicitly. Values in [0, 1] are interpreted as fractions; values in (1, 100] are interpreted as percentages. This mode currently requires exactly one planning horizon because the selected dh_subnodes resources are shared across planning horizons.",
                   "anyOf": [
                     {
-                      "minimum": 0,
                       "type": "number"
                     },
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "default": null,
+                  "description": "Cumulative district heating demand share to represent explicitly. Values in [0, 1] are interpreted as fractions; values in (1, 100] are interpreted as percentages. This mode currently requires exactly one planning horizon because the selected dh_subnodes resources are shared across planning horizons."
                 },
                 "countries": {
                   "default": [],
@@ -4283,26 +4472,61 @@
                 },
                 "use_isi_data_assumptions": {
                   "default": false,
-                  "description": "If true, scale subnode demands to match the model's DH demand using ISI data assumptions as denominator.",
+                  "description": "Scale subnode demands to match the model's district heating demand per country, using the ISI DH area data's assumed national DH shares as denominator.",
                   "type": "boolean"
+                },
+                "census_areas": {
+                  "additionalProperties": true,
+                  "description": "Optional census-based refinement of explicit district-heating subnode geometries.",
+                  "type": "object"
                 }
               }
-            },
-            "ignore_missing_geothermal_data": {
-              "default": false,
-              "description": "If true, missing geothermal data for non-EU countries is ignored. If false, the workflow raises an error when geothermal heat is enabled for countries without available geothermal source data.",
-              "type": "boolean"
             }
           }
         },
-        "heat_pump_sources": {
+        "heat_sources": {
           "additionalProperties": {
             "items": {
+              "description": "Enumeration representing different heat sources for heat pumps and utilisation.\n\nHeat sources are categorized by their characteristics:\n\n**Inexhaustible sources** (AIR, GROUND, SEA_WATER):\n    Always available, no resource bus needed, heat pump draws from ambient.\n\n**Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, PTES):\n    Have spatial/temporal constraints, require resource tracking via buses.\n    A utilisation link splits source heat into direct DH contribution\n    (fraction 1 \u2212 b) and HP input (fraction b), where b is the\n    boosting share from ``build_heat_source_profiles``.\n\nAttributes\n----------\nGEOTHERMAL : str\n    Geothermal heat source with constant temperature.\nRIVER_WATER : str\n    River water heat source with time-varying temperature.\nSEA_WATER : str\n    Sea water heat source (treated as inexhaustible).\nAIR : str\n    Ambient air heat source (inexhaustible).\nGROUND : str\n    Ground/soil heat source (inexhaustible).\nPTES : str\n    Pit Thermal Energy Storage discharge as heat source.\n\nSee Also\n--------\nHeatSystem : Defines heat system types (urban central, urban decentral, rural).\nbuild_heat_source_profiles : Calculates COP, boosting share and cooling profiles.",
+              "enum": [
+                "geothermal",
+                "river_water",
+                "sea_water",
+                "lake_water",
+                "air",
+                "ground",
+                "ptes",
+                "ptes layer 0",
+                "ptes layer 1",
+                "ptes layer 2",
+                "ptes layer 3",
+                "ptes layer 4",
+                "ptes layer 5",
+                "ptes layer 6",
+                "ptes layer 7",
+                "ptes layer 8",
+                "ptes layer 9",
+                "electrolysis_waste",
+                "fischer_tropsch_waste",
+                "sabatier_waste",
+                "haber_bosch_waste",
+                "methanolisation_waste",
+                "fuel_cell_waste"
+              ],
               "type": "string"
             },
             "type": "array"
           },
-          "description": "Heat pump sources by area.",
+          "description": "Heat sources by heat system type. Allowed: urban central: all except 'ground'; urban decentral: ['air']; rural: ['air', 'ground'].",
+          "propertyNames": {
+            "description": "Enumeration representing different types of heat systems.",
+            "enum": [
+              "urban central",
+              "urban decentral",
+              "rural"
+            ],
+            "type": "string"
+          },
           "type": "object"
         },
         "residential_heat": {
@@ -4394,9 +4618,16 @@
           "type": "number"
         },
         "bev_dsm": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            }
+          ],
           "default": true,
-          "description": "Add the option for battery electric vehicles (BEV) to participate in demand-side management (DSM).",
-          "type": "boolean"
+          "description": "Add the option for battery electric vehicles (BEV) to participate in demand-side management (DSM)."
         },
         "bev_dsm_availability": {
           "default": 0.5,
@@ -4594,9 +4825,9 @@
             }
           }
         },
-        "tes": {
+        "ttes": {
           "default": true,
-          "description": "Add option for storing thermal energy in large water pits associated with district heating systems and individual thermal energy storage (TES).",
+          "description": "Enable tank thermal energy storage (TTES) in district heating and individual heating. ",
           "type": "boolean"
         },
         "boilers": {
@@ -6286,9 +6517,96 @@
           "type": "object"
         },
         "ptes": {
-          "additionalProperties": true,
-          "description": "Pit thermal energy storage settings.",
-          "type": "object"
+          "description": "Configuration for `sector.district_heating.ptes` settings.\n\nPit thermal energy storage [PTES] settings. PTES is used only in district heating.\nSee `prepare_sector_network <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-prepare_sector_network>`_\nand `build_ptes_operations <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-build_ptes_operations>`_.",
+          "markdownDescription": "Configuration for `sector.district_heating.ptes` settings.\n\nPit thermal energy storage [PTES] settings. PTES is used only in district heating.\nSee [prepare_sector_network ](https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-prepare_sector_network)\nand [build_ptes_operations ](https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-build_ptes_operations).",
+          "properties": {
+            "enable": {
+              "default": true,
+              "description": "Enable PTES. The function `add_heat()` in `prepare_sector_network` then adds the stores `<node> urban central water pits` as well as the links `<node> urban central water pits charger` and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
+              "type": "boolean"
+            },
+            "dynamic_capacity": {
+              "default": false,
+              "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Only meaningful with dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
+              "type": "boolean"
+            },
+            "charge_boosting_required": {
+              "default": false,
+              "description": "Deprecated. Not implemented.",
+              "type": "boolean"
+            },
+            "discharge_resistive_boosting": {
+              "default": false,
+              "description": "If True, enables boosting by resistive heaters instead of heat pumps. `prepare_sector_network` then adds the links `<node> urban central water pits resistive booster` and `<node> urban central water pits resistive heater stand-alone` and reroutes heat generation from resistive heaters accordingly. The required boosting energy is computed in `build_ptes_operations` as `ptes_boost_per_discharge_profiles_base_s<nodes>_<year>.nc`.",
+              "type": "boolean"
+            },
+            "top_temperature": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "forward",
+                  "type": "string"
+                }
+              ],
+              "default": 90,
+              "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
+            },
+            "bottom_temperature": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "return",
+                  "type": "string"
+                }
+              ],
+              "default": 35,
+              "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
+            },
+            "design_top_temperature": {
+              "default": 90,
+              "description": "Design top temperature in \u00b0C for capacity calculation.",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "design_bottom_temperature": {
+              "default": 35,
+              "description": "Design bottom temperature in \u00b0C for capacity calculation.",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "booster_source_dt": {
+              "default": 6,
+              "description": "Source-side temperature drop \u0394T in K of the PTES booster heat pump: how far below the HP inlet the discharged volume is cooled across the evaporator. Sets the COP source-outlet and the deposit-layer target. See `build_ptes_operations`.",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "layered": {
+              "description": "Configuration for `sector.district_heating.ptes.layered` settings.",
+              "properties": {
+                "enable": {
+                  "default": false,
+                  "description": "Gate the per-layer heat-source COP expansion in `build_heat_source_profiles`. The layered volume model itself is selected by the number of layer_temperatures (>= 3).",
+                  "type": "boolean"
+                },
+                "layer_temperatures": {
+                  "description": "Fixed layer temperatures in \u00b0C, hottest first. One value keeps the simple energy-only model; three or more select the layered volume model.",
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "potential_limit": {
+              "additionalProperties": true,
+              "description": "Optional PTES energy-capacity limits derived from eligible land within district-heating areas.",
+              "type": "object"
+            }
+          }
         },
         "ates": {
           "additionalProperties": true,
@@ -6297,38 +6615,45 @@
         },
         "heat_source_cooling": {
           "default": 6,
-          "description": "Cooling of heat source for heat pumps.",
+          "description": "Cooling of heat source for heat pumps [K]. For preheating central sources this is the starting guess of the iterative solve (see heat_pump_cooling_iterative); for all other sources it is the flat cooling value.",
           "type": "number"
+        },
+        "heat_pump_cooling_iterative": {
+          "default": true,
+          "description": "Solve the source-side cooling and the COP consistently for preheating central heat sources via fixed-point (Picard) iteration of dT_cool = (COP - 1)/COP * (T_forward - T_source). If False, the flat heat_source_cooling value is used for all sources.",
+          "type": "boolean"
+        },
+        "log_heat_pump_cooling_iterations": {
+          "default": false,
+          "description": "Debugging aid: write the full per-node, per-timestep, per-iteration cooling/COP trace of the iterative solve to heat_pump_cooling_iterations_<...>.csv alongside the COP profiles.",
+          "type": "boolean"
         },
         "heat_pump_cop_approximation": {
           "additionalProperties": true,
           "description": "Heat pump COP approximation settings.",
           "type": "object"
         },
-        "limited_heat_sources": {
-          "additionalProperties": true,
-          "description": "Dictionary with names of limited heat sources (not air). Must be `river_water` / `geothermal` or another heat source in `Manz et al. 2024 <https://www.sciencedirect.com/science/article/pii/S0960148124001769>`_.",
-          "markdownDescription": "Dictionary with names of limited heat sources (not air). Must be `river_water` / `geothermal` or another heat source in [Manz et al. 2024 ](https://www.sciencedirect.com/science/article/pii/S0960148124001769).",
-          "type": "object"
-        },
-        "direct_utilisation_heat_sources": {
-          "description": "List of heat sources for direct heat utilisation in district heating. Must be in the keys of `heat_utilisation_potentials` (e.g. `geothermal`).",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "temperature_limited_stores": {
-          "description": "List of names for stores used as limited heat sources.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
         "dh_areas": {
           "additionalProperties": true,
           "description": "District heating areas settings.",
           "type": "object"
+        },
+        "ignore_missing_geothermal_data": {
+          "default": false,
+          "description": "If true, missing geothermal data for non-EU countries will be ignored. If false, an error will be raised if countries with missing data are modelled while geothermal heat is included as a heat source.",
+          "type": "boolean"
+        },
+        "heat_source_temperatures": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Assumed constant temperatures (\u00b0C) of heat sources used for district heating. When a heat source is included in `heat_sources`, its temperature determines whether heat can be used directly (T_source > T_forward), the ratio for preheating (T_return < T_source < T_forward), or boosting via heat pumps.",
+          "type": "object"
+        },
+        "fallback_ptx_heat_losses": {
+          "default": 0.05,
+          "description": "Assumed fractional heat loss for PtX processes whose technology data does not provide an explicit heat output efficiency (currently Sabatier and H2 Fuel Cell). For these processes the waste heat efficiency is calculated as ``1 - fallback_ptx_heat_losses - main_efficiency`` with `main_efficiency` referring to the `efficiency` field in the cost data. See ``HeatSource.get_waste_heat_efficiency()`` in ``scripts/definitions/heat_source.py`` and ``add_waste_heat()`` in ``scripts/prepare_sector_network.py``.",
+          "type": "number"
         },
         "subnodes": {
           "description": "Configuration for `sector.district_heating.subnodes` settings.",
@@ -6342,6 +6667,18 @@
               "default": 10,
               "description": "Number of largest district heating subnodes that are explicitly represented in the network.",
               "type": "integer"
+            },
+            "demand_share": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Cumulative district heating demand share to represent explicitly. Values in [0, 1] are interpreted as fractions; values in (1, 100] are interpreted as percentages. This mode currently requires exactly one planning horizon because the selected dh_subnodes resources are shared across planning horizons."
             },
             "countries": {
               "default": [],
@@ -6363,8 +6700,13 @@
             },
             "use_isi_data_assumptions": {
               "default": false,
-              "description": "If true, scale subnode demands to match the model's DH demand using ISI data assumptions as denominator.",
+              "description": "Scale subnode demands to match the model's district heating demand per country, using the ISI DH area data's assumed national DH shares as denominator.",
               "type": "boolean"
+            },
+            "census_areas": {
+              "additionalProperties": true,
+              "description": "Optional census-based refinement of explicit district-heating subnode geometries.",
+              "type": "object"
             }
           }
         }
@@ -6992,6 +7334,13 @@
                     "type": "string"
                   },
                   "type": "object"
+                },
+                {
+                  "additionalProperties": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "object"
                 }
               ],
               "description": "Specifies the turbine type and its characteristic power curve. Can be a string or a dictionary with years as keys which denote the year another turbine model becomes available."
@@ -7173,6 +7522,13 @@
                 {
                   "additionalProperties": {
                     "type": "string"
+                  },
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": {
+                    "additionalProperties": true,
+                    "type": "object"
                   },
                   "type": "object"
                 }
@@ -7411,6 +7767,115 @@
           ],
           "default": null,
           "description": "Path to a temporary directory where intermediate files are stored when building the cutout. Helpful when building large cutouts."
+        }
+      }
+    },
+    "_PtesConfig": {
+      "description": "Configuration for `sector.district_heating.ptes` settings.\n\nPit thermal energy storage [PTES] settings. PTES is used only in district heating.\nSee `prepare_sector_network <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-prepare_sector_network>`_\nand `build_ptes_operations <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-build_ptes_operations>`_.",
+      "markdownDescription": "Configuration for `sector.district_heating.ptes` settings.\n\nPit thermal energy storage [PTES] settings. PTES is used only in district heating.\nSee [prepare_sector_network ](https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-prepare_sector_network)\nand [build_ptes_operations ](https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-build_ptes_operations).",
+      "properties": {
+        "enable": {
+          "default": true,
+          "description": "Enable PTES. The function `add_heat()` in `prepare_sector_network` then adds the stores `<node> urban central water pits` as well as the links `<node> urban central water pits charger` and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
+          "type": "boolean"
+        },
+        "dynamic_capacity": {
+          "default": false,
+          "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Only meaningful with dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
+          "type": "boolean"
+        },
+        "charge_boosting_required": {
+          "default": false,
+          "description": "Deprecated. Not implemented.",
+          "type": "boolean"
+        },
+        "discharge_resistive_boosting": {
+          "default": false,
+          "description": "If True, enables boosting by resistive heaters instead of heat pumps. `prepare_sector_network` then adds the links `<node> urban central water pits resistive booster` and `<node> urban central water pits resistive heater stand-alone` and reroutes heat generation from resistive heaters accordingly. The required boosting energy is computed in `build_ptes_operations` as `ptes_boost_per_discharge_profiles_base_s<nodes>_<year>.nc`.",
+          "type": "boolean"
+        },
+        "top_temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "forward",
+              "type": "string"
+            }
+          ],
+          "default": 90,
+          "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
+        },
+        "bottom_temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "return",
+              "type": "string"
+            }
+          ],
+          "default": 35,
+          "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
+        },
+        "design_top_temperature": {
+          "default": 90,
+          "description": "Design top temperature in \u00b0C for capacity calculation.",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "design_bottom_temperature": {
+          "default": 35,
+          "description": "Design bottom temperature in \u00b0C for capacity calculation.",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "booster_source_dt": {
+          "default": 6,
+          "description": "Source-side temperature drop \u0394T in K of the PTES booster heat pump: how far below the HP inlet the discharged volume is cooled across the evaporator. Sets the COP source-outlet and the deposit-layer target. See `build_ptes_operations`.",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "layered": {
+          "description": "Configuration for `sector.district_heating.ptes.layered` settings.",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Gate the per-layer heat-source COP expansion in `build_heat_source_profiles`. The layered volume model itself is selected by the number of layer_temperatures (>= 3).",
+              "type": "boolean"
+            },
+            "layer_temperatures": {
+              "description": "Fixed layer temperatures in \u00b0C, hottest first. One value keeps the simple energy-only model; three or more select the layered volume model.",
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            }
+          }
+        },
+        "potential_limit": {
+          "additionalProperties": true,
+          "description": "Optional PTES energy-capacity limits derived from eligible land within district-heating areas.",
+          "type": "object"
+        }
+      }
+    },
+    "_PtesLayeredConfig": {
+      "description": "Configuration for `sector.district_heating.ptes.layered` settings.",
+      "properties": {
+        "enable": {
+          "default": false,
+          "description": "Gate the per-layer heat-source COP expansion in `build_heat_source_profiles`. The layered volume model itself is selected by the number of layer_temperatures (>= 3).",
+          "type": "boolean"
+        },
+        "layer_temperatures": {
+          "description": "Fixed layer temperatures in \u00b0C, hottest first. One value keeps the simple energy-only model; three or more select the layered volume model.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
         }
       }
     },
@@ -7968,6 +8433,18 @@
           "description": "Number of largest district heating subnodes that are explicitly represented in the network.",
           "type": "integer"
         },
+        "demand_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cumulative district heating demand share to represent explicitly. Values in [0, 1] are interpreted as fractions; values in (1, 100] are interpreted as percentages. This mode currently requires exactly one planning horizon because the selected dh_subnodes resources are shared across planning horizons."
+        },
         "countries": {
           "default": [],
           "description": "List of country codes to consider for district heating subnodes. If empty, all countries are considered.",
@@ -7988,8 +8465,13 @@
         },
         "use_isi_data_assumptions": {
           "default": false,
-          "description": "If true, scale subnode demands to match the model's DH demand using ISI data assumptions as denominator.",
+          "description": "Scale subnode demands to match the model's district heating demand per country, using the ISI DH area data's assumed national DH shares as denominator.",
           "type": "boolean"
+        },
+        "census_areas": {
+          "additionalProperties": true,
+          "description": "Optional census-based refinement of explicit district-heating subnode geometries.",
+          "type": "object"
         }
       }
     },
@@ -8118,6 +8600,13 @@
             {
               "additionalProperties": {
                 "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "additionalProperties": {
+                "additionalProperties": true,
+                "type": "object"
               },
               "type": "object"
             }
@@ -9012,6 +9501,13 @@
                         "type": "string"
                       },
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "object"
                     }
                   ],
                   "description": "Specifies the turbine type and its characteristic power curve. Can be a string or a dictionary with years as keys which denote the year another turbine model becomes available."
@@ -9146,6 +9642,13 @@
                     {
                       "additionalProperties": {
                         "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": {
+                        "additionalProperties": true,
+                        "type": "object"
                       },
                       "type": "object"
                     }
@@ -9331,6 +9834,13 @@
                         "type": "string"
                       },
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "object"
                     }
                   ],
                   "description": "Specifies the turbine type and its characteristic power curve. Can be a string or a dictionary with years as keys which denote the year another turbine model becomes available."
@@ -9512,6 +10022,13 @@
                     {
                       "additionalProperties": {
                         "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": {
+                        "additionalProperties": true,
+                        "type": "object"
                       },
                       "type": "object"
                     }
@@ -10613,9 +11130,96 @@
               "type": "object"
             },
             "ptes": {
-              "additionalProperties": true,
-              "description": "Pit thermal energy storage settings.",
-              "type": "object"
+              "description": "Configuration for `sector.district_heating.ptes` settings.\n\nPit thermal energy storage [PTES] settings. PTES is used only in district heating.\nSee `prepare_sector_network <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-prepare_sector_network>`_\nand `build_ptes_operations <https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-build_ptes_operations>`_.",
+              "markdownDescription": "Configuration for `sector.district_heating.ptes` settings.\n\nPit thermal energy storage [PTES] settings. PTES is used only in district heating.\nSee [prepare_sector_network ](https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-prepare_sector_network)\nand [build_ptes_operations ](https://pypsa-eur.readthedocs.io/en/latest/sector.html#module-build_ptes_operations).",
+              "properties": {
+                "enable": {
+                  "default": true,
+                  "description": "Enable PTES. The function `add_heat()` in `prepare_sector_network` then adds the stores `<node> urban central water pits` as well as the links `<node> urban central water pits charger` and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
+                  "type": "boolean"
+                },
+                "dynamic_capacity": {
+                  "default": false,
+                  "description": "Carry the time-varying e_max_pu profile over between myopic planning horizons in `add_brownfield`. Only meaningful with dynamic ('forward'/'return') top/bottom temperatures, where the capacity scaling follows the district heating network temperatures.",
+                  "type": "boolean"
+                },
+                "charge_boosting_required": {
+                  "default": false,
+                  "description": "Deprecated. Not implemented.",
+                  "type": "boolean"
+                },
+                "discharge_resistive_boosting": {
+                  "default": false,
+                  "description": "If True, enables boosting by resistive heaters instead of heat pumps. `prepare_sector_network` then adds the links `<node> urban central water pits resistive booster` and `<node> urban central water pits resistive heater stand-alone` and reroutes heat generation from resistive heaters accordingly. The required boosting energy is computed in `build_ptes_operations` as `ptes_boost_per_discharge_profiles_base_s<nodes>_<year>.nc`.",
+                  "type": "boolean"
+                },
+                "top_temperature": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "const": "forward",
+                      "type": "string"
+                    }
+                  ],
+                  "default": 90,
+                  "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
+                },
+                "bottom_temperature": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "const": "return",
+                      "type": "string"
+                    }
+                  ],
+                  "default": 35,
+                  "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
+                },
+                "design_top_temperature": {
+                  "default": 90,
+                  "description": "Design top temperature in \u00b0C for capacity calculation.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "design_bottom_temperature": {
+                  "default": 35,
+                  "description": "Design bottom temperature in \u00b0C for capacity calculation.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "booster_source_dt": {
+                  "default": 6,
+                  "description": "Source-side temperature drop \u0394T in K of the PTES booster heat pump: how far below the HP inlet the discharged volume is cooled across the evaporator. Sets the COP source-outlet and the deposit-layer target. See `build_ptes_operations`.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "layered": {
+                  "description": "Configuration for `sector.district_heating.ptes.layered` settings.",
+                  "properties": {
+                    "enable": {
+                      "default": false,
+                      "description": "Gate the per-layer heat-source COP expansion in `build_heat_source_profiles`. The layered volume model itself is selected by the number of layer_temperatures (>= 3).",
+                      "type": "boolean"
+                    },
+                    "layer_temperatures": {
+                      "description": "Fixed layer temperatures in \u00b0C, hottest first. One value keeps the simple energy-only model; three or more select the layered volume model.",
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    }
+                  }
+                },
+                "potential_limit": {
+                  "additionalProperties": true,
+                  "description": "Optional PTES energy-capacity limits derived from eligible land within district-heating areas.",
+                  "type": "object"
+                }
+              }
             },
             "ates": {
               "additionalProperties": true,
@@ -10624,38 +11228,45 @@
             },
             "heat_source_cooling": {
               "default": 6,
-              "description": "Cooling of heat source for heat pumps.",
+              "description": "Cooling of heat source for heat pumps [K]. For preheating central sources this is the starting guess of the iterative solve (see heat_pump_cooling_iterative); for all other sources it is the flat cooling value.",
               "type": "number"
+            },
+            "heat_pump_cooling_iterative": {
+              "default": true,
+              "description": "Solve the source-side cooling and the COP consistently for preheating central heat sources via fixed-point (Picard) iteration of dT_cool = (COP - 1)/COP * (T_forward - T_source). If False, the flat heat_source_cooling value is used for all sources.",
+              "type": "boolean"
+            },
+            "log_heat_pump_cooling_iterations": {
+              "default": false,
+              "description": "Debugging aid: write the full per-node, per-timestep, per-iteration cooling/COP trace of the iterative solve to heat_pump_cooling_iterations_<...>.csv alongside the COP profiles.",
+              "type": "boolean"
             },
             "heat_pump_cop_approximation": {
               "additionalProperties": true,
               "description": "Heat pump COP approximation settings.",
               "type": "object"
             },
-            "limited_heat_sources": {
-              "additionalProperties": true,
-              "description": "Dictionary with names of limited heat sources (not air). Must be `river_water` / `geothermal` or another heat source in `Manz et al. 2024 <https://www.sciencedirect.com/science/article/pii/S0960148124001769>`_.",
-              "markdownDescription": "Dictionary with names of limited heat sources (not air). Must be `river_water` / `geothermal` or another heat source in [Manz et al. 2024 ](https://www.sciencedirect.com/science/article/pii/S0960148124001769).",
-              "type": "object"
-            },
-            "direct_utilisation_heat_sources": {
-              "description": "List of heat sources for direct heat utilisation in district heating. Must be in the keys of `heat_utilisation_potentials` (e.g. `geothermal`).",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "temperature_limited_stores": {
-              "description": "List of names for stores used as limited heat sources.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
             "dh_areas": {
               "additionalProperties": true,
               "description": "District heating areas settings.",
               "type": "object"
+            },
+            "ignore_missing_geothermal_data": {
+              "default": false,
+              "description": "If true, missing geothermal data for non-EU countries will be ignored. If false, an error will be raised if countries with missing data are modelled while geothermal heat is included as a heat source.",
+              "type": "boolean"
+            },
+            "heat_source_temperatures": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "description": "Assumed constant temperatures (\u00b0C) of heat sources used for district heating. When a heat source is included in `heat_sources`, its temperature determines whether heat can be used directly (T_source > T_forward), the ratio for preheating (T_return < T_source < T_forward), or boosting via heat pumps.",
+              "type": "object"
+            },
+            "fallback_ptx_heat_losses": {
+              "default": 0.05,
+              "description": "Assumed fractional heat loss for PtX processes whose technology data does not provide an explicit heat output efficiency (currently Sabatier and H2 Fuel Cell). For these processes the waste heat efficiency is calculated as ``1 - fallback_ptx_heat_losses - main_efficiency`` with `main_efficiency` referring to the `efficiency` field in the cost data. See ``HeatSource.get_waste_heat_efficiency()`` in ``scripts/definitions/heat_source.py`` and ``add_waste_heat()`` in ``scripts/prepare_sector_network.py``.",
+              "type": "number"
             },
             "subnodes": {
               "description": "Configuration for `sector.district_heating.subnodes` settings.",
@@ -10669,6 +11280,18 @@
                   "default": 10,
                   "description": "Number of largest district heating subnodes that are explicitly represented in the network.",
                   "type": "integer"
+                },
+                "demand_share": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Cumulative district heating demand share to represent explicitly. Values in [0, 1] are interpreted as fractions; values in (1, 100] are interpreted as percentages. This mode currently requires exactly one planning horizon because the selected dh_subnodes resources are shared across planning horizons."
                 },
                 "countries": {
                   "default": [],
@@ -10687,24 +11310,64 @@
                   "default": "Label",
                   "description": "Name of the column in the single-system level data to use for subnode labels.",
                   "type": "string"
-              },
-              "use_isi_data_assumptions": {
-                "default": false,
-                "description": "If true, scale subnode demands to match the model's DH demand using ISI data assumptions as denominator.",
-                "type": "boolean"
-              }
+                },
+                "use_isi_data_assumptions": {
+                  "default": false,
+                  "description": "Scale subnode demands to match the model's district heating demand per country, using the ISI DH area data's assumed national DH shares as denominator.",
+                  "type": "boolean"
+                },
+                "census_areas": {
+                  "additionalProperties": true,
+                  "description": "Optional census-based refinement of explicit district-heating subnode geometries.",
+                  "type": "object"
+                }
               }
             }
           }
         },
-        "heat_pump_sources": {
+        "heat_sources": {
           "additionalProperties": {
             "items": {
+              "description": "Enumeration representing different heat sources for heat pumps and utilisation.\n\nHeat sources are categorized by their characteristics:\n\n**Inexhaustible sources** (AIR, GROUND, SEA_WATER):\n    Always available, no resource bus needed, heat pump draws from ambient.\n\n**Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, PTES):\n    Have spatial/temporal constraints, require resource tracking via buses.\n    A utilisation link splits source heat into direct DH contribution\n    (fraction 1 \u2212 b) and HP input (fraction b), where b is the\n    boosting share from ``build_heat_source_profiles``.\n\nAttributes\n----------\nGEOTHERMAL : str\n    Geothermal heat source with constant temperature.\nRIVER_WATER : str\n    River water heat source with time-varying temperature.\nSEA_WATER : str\n    Sea water heat source (treated as inexhaustible).\nAIR : str\n    Ambient air heat source (inexhaustible).\nGROUND : str\n    Ground/soil heat source (inexhaustible).\nPTES : str\n    Pit Thermal Energy Storage discharge as heat source.\n\nSee Also\n--------\nHeatSystem : Defines heat system types (urban central, urban decentral, rural).\nbuild_heat_source_profiles : Calculates COP, boosting share and cooling profiles.",
+              "enum": [
+                "geothermal",
+                "river_water",
+                "sea_water",
+                "lake_water",
+                "air",
+                "ground",
+                "ptes",
+                "ptes layer 0",
+                "ptes layer 1",
+                "ptes layer 2",
+                "ptes layer 3",
+                "ptes layer 4",
+                "ptes layer 5",
+                "ptes layer 6",
+                "ptes layer 7",
+                "ptes layer 8",
+                "ptes layer 9",
+                "electrolysis_waste",
+                "fischer_tropsch_waste",
+                "sabatier_waste",
+                "haber_bosch_waste",
+                "methanolisation_waste",
+                "fuel_cell_waste"
+              ],
               "type": "string"
             },
             "type": "array"
           },
-          "description": "Heat pump sources by area.",
+          "description": "Heat sources by heat system type. Allowed: urban central: all except 'ground'; urban decentral: ['air']; rural: ['air', 'ground'].",
+          "propertyNames": {
+            "description": "Enumeration representing different types of heat systems.",
+            "enum": [
+              "urban central",
+              "urban decentral",
+              "rural"
+            ],
+            "type": "string"
+          },
           "type": "object"
         },
         "residential_heat": {
@@ -10796,9 +11459,16 @@
           "type": "number"
         },
         "bev_dsm": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            }
+          ],
           "default": true,
-          "description": "Add the option for battery electric vehicles (BEV) to participate in demand-side management (DSM).",
-          "type": "boolean"
+          "description": "Add the option for battery electric vehicles (BEV) to participate in demand-side management (DSM)."
         },
         "bev_dsm_availability": {
           "default": 0.5,
@@ -10996,9 +11666,9 @@
             }
           }
         },
-        "tes": {
+        "ttes": {
           "default": true,
-          "description": "Add option for storing thermal energy in large water pits associated with district heating systems and individual thermal energy storage (TES).",
+          "description": "Enable tank thermal energy storage (TTES) in district heating and individual heating. ",
           "type": "boolean"
         },
         "boilers": {
@@ -11667,9 +12337,19 @@
           "type": "object"
         },
         "HVC_environment_sequestration_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            }
+          ],
           "default": 0.0,
-          "description": "The fraction of high value chemicals (HVC) put into landfill resulting in additional carbon sequestration. The default value is 0.",
-          "type": "number"
+          "description": "The fraction of high value chemicals (HVC) put into landfill resulting in additional carbon sequestration. The default value is 0."
         },
         "waste_to_energy": {
           "default": false,
@@ -13758,6 +14438,26 @@
           }
         },
         "bidding_zones_entsoepy": {
+          "description": "Configuration for a single data source.",
+          "properties": {
+            "source": {
+              "default": "archive",
+              "description": "Source of the data. 'archive' retrieves pre-built data, 'primary' retrieves from primary source.",
+              "enum": [
+                "archive",
+                "primary",
+                "build"
+              ],
+              "type": "string"
+            },
+            "version": {
+              "default": "latest",
+              "description": "Version of the data to use. Uses the specific 'version' for the selected 'source' or the dataset tagged 'latest' for this source.",
+              "type": "string"
+            }
+          }
+        },
+        "lake_data": {
           "description": "Configuration for a single data source.",
           "properties": {
             "source": {
