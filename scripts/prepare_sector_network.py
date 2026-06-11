@@ -3599,7 +3599,12 @@ def add_heat(
                             efficiency3=-booster_volume_efficiency,
                             capital_cost=0,
                             p_max_pu=0,
-                            p_min_pu=-1,
+                            # A zero volume efficiency means the booster has no
+                            # evaporator (no deposit layer below the return
+                            # temperature): forbid operation there instead of
+                            # letting the link create heat from electricity
+                            # alone.
+                            p_min_pu=-(booster_volume_efficiency > 0).astype(float),
                             p_nom_extendable=True,
                             carrier=f"{heat_system} ptes{layer_suffix} heat pump",
                         )

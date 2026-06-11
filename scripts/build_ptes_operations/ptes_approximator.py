@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+import logging
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -9,6 +11,8 @@ import xarray as xr
 from scripts.build_heat_source_profiles.central_heating_cop_approximator import (
     CentralHeatingCopApproximator,
 )
+
+logger = logging.getLogger(__name__)
 
 # Number of layers at/above which the layered volume model is used. Fewer layers
 # fall back to the simple energy-only model (one store at the top temperature).
@@ -515,6 +519,25 @@ class PtesApproximator:
         )
 
         if self.is_layered:
+            # The booster heat pump deposits the discharged volume at a layer
+            # below the return-temperature layer. If the return layer IS the
+            # bottom layer, there is nothing colder to deposit into: the
+            # booster cannot operate (its volume efficiencies are zero) and
+            # discharge requiring a boost becomes infeasible.
+            degenerate = self.return_temp_layer == self.num_layers - 1
+            if bool(degenerate.any()):
+                if self._time_dim in degenerate.dims:
+                    degenerate = degenerate.any(dim=self._time_dim)
+                affected = list(degenerate["name"].values[degenerate.values])
+                logger.warning(
+                    "The return-temperature layer is the coldest modelled "
+                    f"layer for nodes {affected}: the booster heat pump has "
+                    "no deposit layer below the return temperature and cannot "
+                    "operate (boosted discharge is disabled there). Add a "
+                    "layer below the district heating return temperature to "
+                    "sector.district_heating.ptes.layered.layer_temperatures."
+                )
+
             ds["charging_availability"] = self.charging_availability
             ds["layer_needs_boosting"] = self.layer_needs_boosting
             ds["charger_efficiency_by_source"] = self.charger_efficiency_by_source
