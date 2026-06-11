@@ -671,7 +671,6 @@ def input_heat_source_temperature(
     replace_names: dict[str, str] = {
         "air": "air_total",
         "ground": "soil_total",
-        "ptes": "ptes_top_profiles",
     },
 ) -> dict[str, str]:
     """
@@ -700,20 +699,23 @@ def input_heat_source_temperature(
         config_provider("sector", "heat_sources", "rural")(w),
     )
 
+    from scripts.definitions.heat_source import HeatSourceType
+
     file_names = {}
     for heat_source_name in heat_sources:
         heat_source = HeatSource(heat_source_name)
-        # Skip heat sources with temperatures defined in config (not from file)
-        if heat_source.temperature_from_config:
+        # Skip heat sources with temperatures defined in config (not from file).
+        # Storage sources (PTES) take their layer temperatures from config too
+        # (see build_heat_source_profiles); the former temp_ptes_top_profiles
+        # file no longer exists.
+        if (
+            heat_source.temperature_from_config
+            or heat_source.source_type == HeatSourceType.STORAGE
+        ):
             continue
-        if heat_source_name == "ptes":
-            file_names[f"temp_{heat_source_name}"] = resources(
-                f"temp_{replace_names.get(heat_source_name, heat_source_name)}_base_s_{{clusters}}_{{planning_horizons}}.nc"
-            )
-        else:
-            file_names[f"temp_{heat_source_name}"] = resources(
-                f"temp_{replace_names.get(heat_source_name, heat_source_name)}_base_s_{{clusters}}.nc"
-            )
+        file_names[f"temp_{heat_source_name}"] = resources(
+            f"temp_{replace_names.get(heat_source_name, heat_source_name)}_base_s_{{clusters}}.nc"
+        )
     return file_names
 
 
@@ -1902,7 +1904,7 @@ def input_heat_source_power(w):
     heat_sources = config_provider("sector", "heat_sources", "urban central")(w)
 
     for heat_source_name in heat_sources:
-        if HeatSource(heat_source_name).requires_generator:
+        if HeatSource(heat_source_name).requires_generator():
             if HeatSource(heat_source_name) == HeatSource.GEOTHERMAL:
                 result[heat_source_name] = resources(
                     "heat_source_power_"
