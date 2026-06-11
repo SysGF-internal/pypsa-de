@@ -1,0 +1,145 @@
+# SPDX-FileCopyrightText: : 2026 PyPSA-DE authors
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# PTES feature-matrix test scenarios (used with config/config.test_dev.yaml).
+#
+# Each scenario isolates one combination of the PTES configuration switches.
+# The expected behaviour listed per scenario is what
+# scripts/pypsa-de/evaluate_ptes_feature_matrix.py checks and visualises.
+#
+# Overview:
+#   PTESoff        no PTES at all (workflow robustness without the feature)
+#   simple_hp      energy-only store, booster heat pump, no capacity scaling
+#   simple_rh      energy-only store, dual-use resistive heater boosting
+#   simple_hp_tdc  energy-only store, static capacity scaling (e_max_pu < 1)
+#   simple_hp_dyn  energy-only store, dynamic temperatures + time-varying e_max_pu
+#   layered_hp     layered volume model, per-layer booster heat pumps
+#   layered_rh     layered volume model, resistive boosting
+
+
+# No PTES: ptes disabled and removed from the urban-central heat sources, so
+# neither the store/charger/discharger components nor the ptes entries in the
+# COP/boosting profiles are built.
+# Expected: no 'water pits' components in the solved network.
+PTESoff:
+  sector:
+    heat_sources:
+      urban central:
+      - air
+      - geothermal
+      - electrolysis_waste
+      - fuel_cell_waste
+      - fischer_tropsch_waste
+      - haber_bosch_waste
+      - sabatier_waste
+      - methanolisation_waste
+    district_heating:
+      ptes:
+        enable: false
+
+# Baseline simple model: single 90 C layer, booster heat pump, legacy
+# capacity behaviour (e_max_pu = 1).
+# Expected: one aggregate store per node, charger/discharger, a reversed
+# 'ptes heat pump' link that only runs in hours with forward T > 90 C;
+# SOC bound = e_nom (no derating).
+simple_hp:
+  sector:
+    district_heating:
+      ptes:
+        enable: true
+        temperature_dependent_capacity: false
+        discharge_resistive_boosting: false
+        top_temperature: 90
+        bottom_temperature: 35
+        layered:
+          enable: false
+          layer_temperatures: [90]
+
+# Simple model with resistive boosting: the boost energy demand
+# b = (T_fwd - T_top)+ / (T_top - T_ret) per unit discharge is injected onto
+# the boost-demand bus and must be served by the dual-use resistive heater.
+# Expected: 'water pits resistive booster' + 'resistive heater stand-alone'
+# routing links, no ptes heat pump; booster heat / discharge heat matches b.
+simple_rh:
+  sector:
+    district_heating:
+      ptes:
+        enable: true
+        temperature_dependent_capacity: false
+        discharge_resistive_boosting: true
+        top_temperature: 90
+        bottom_temperature: 35
+        layered:
+          enable: false
+          layer_temperatures: [90]
+
+# Simple model with static capacity scaling: operating spread 80-35 against
+# design spread 90-35 derates the store.
+# Expected: e_max_pu = 45/55 = 0.818; max SOC <= 0.818 * e_nom_opt.
+simple_hp_tdc:
+  sector:
+    district_heating:
+      ptes:
+        enable: true
+        temperature_dependent_capacity: true
+        discharge_resistive_boosting: false
+        top_temperature: 80
+        bottom_temperature: 35
+        layered:
+          enable: false
+          layer_temperatures: [90]
+
+# Simple model with dynamic temperatures: top follows the forward temperature
+# (clipped to design top 90 C), bottom follows the return temperature, and the
+# capacity scaling becomes a time-varying e_max_pu profile.
+# Expected: stores_t.e_max_pu carries a (time x node) profile; boosting only
+# in hours with forward T above the design top temperature.
+simple_hp_dyn:
+  sector:
+    district_heating:
+      ptes:
+        enable: true
+        temperature_dependent_capacity: true
+        discharge_resistive_boosting: false
+        top_temperature: forward
+        bottom_temperature: return
+        layered:
+          enable: false
+          layer_temperatures: [90]
+
+# Layered volume model with booster heat pumps: per-layer m3 stores,
+# volume-trade chargers, discharger multilinks, per-layer booster HPs plus the
+# capacity-carrying dummy HP, and the layered solver constraints.
+# Expected: 5 layer stores per node with constant total volume; aggregate
+# store carries capacity (no e_max_pu); throughput bounded by e_nom / e2p.
+layered_hp:
+  sector:
+    district_heating:
+      ptes:
+        enable: true
+        temperature_dependent_capacity: false
+        discharge_resistive_boosting: false
+        top_temperature: 90
+        bottom_temperature: 35
+        layered:
+          enable: true
+          layer_temperatures: [90, 75, 60, 45, 35]
+
+# Layered volume model with resistive boosting: dischargers always return the
+# volume to the return-level layer and inject the boost energy demand onto the
+# boost-demand bus; no booster HPs or dummy HP are built.
+# Expected: same layer/store structure as layered_hp but with the dual-use
+# resistive heater serving the boost demand.
+layered_rh:
+  sector:
+    district_heating:
+      ptes:
+        enable: true
+        temperature_dependent_capacity: false
+        discharge_resistive_boosting: true
+        top_temperature: 90
+        bottom_temperature: 35
+        layered:
+          enable: true
+          layer_temperatures: [90, 75, 60, 45, 35]

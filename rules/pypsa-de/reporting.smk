@@ -301,6 +301,23 @@ rule get_sysgf_summary:
         scripts("pypsa-de/get_sysgf_summary.py")
 
 
+rule evaluate_ptes_feature_matrix:
+    params:
+        run=config["run"]["prefix"],
+        scenarios=config["run"]["name"],
+    input:
+        networks=SOLVED_NETWORKS,
+    output:
+        pdf=_SYSGF_DIR + "sysgf/ptes_feature_matrix.pdf",
+        summary=_SYSGF_DIR + "sysgf/ptes_feature_matrix_summary.csv",
+    resources:
+        mem_mb=16000,
+    log:
+        _SYSGF_DIR + "logs/evaluate_ptes_feature_matrix.log",
+    script:
+        scripts("pypsa-de/evaluate_ptes_feature_matrix.py")
+
+
 rule plot_temporal_heat_balance:
     params:
         plotting=config_provider("sysgf", "plotting"),

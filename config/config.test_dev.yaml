@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: : 2026 PyPSA-DE authors
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# PTES feature-matrix test configuration.
+#
+# Runs one reduced-size scenario per PTES configuration combination (off /
+# simple / layered x heat-pump / resistive boosting x capacity scaling /
+# dynamic temperatures) so the workflow robustness and the feature logic can
+# be checked side by side. Scenario definitions and the functionality each one
+# exercises are documented in config/scenarios.test_dev.yaml.
+#
+# Usage (after activating the pixi env on the cluster):
+#   pixi run snakemake --configfile=config/config.test_dev.yaml build_scenarios
+#   pixi run snakemake --profile slurm --configfile=config/config.test_dev.yaml evaluate_ptes_feature_matrix
+#
+# The evaluate_ptes_feature_matrix target solves all scenario networks and
+# writes results/test_dev_ptes/sysgf/ptes_feature_matrix.pdf (+ summary csv)
+# with per-scenario functionality checks and visualisations.
+
+run:
+  prefix: test_dev_ptes
+  name:
+  - PTESoff
+  - simple_hp
+  - simple_rh
+  - simple_hp_tdc
+  - simple_hp_dyn
+  - layered_hp
+  - layered_rh
+  scenarios:
+    enable: true
+    manual_file: config/scenarios.test_dev.yaml
+    file: config/scenarios.automated.test_dev.yaml
+  shared_resources:
+    policy: base
+    exclude:
+    - existing_heating.csv
+    - costs
+    - retrieve_cost
+    - industry_sector_ratios
+    - build_industry_sector_ratios
+    - modify_existing_heating
+
+remote:
+  ssh: "zecm"
+  path: "/home/users/c/cpschau/scratch/pypsa-sysgf"
+
+foresight: myopic
+
+scenario:
+  ll:
+  - vopt
+  clusters:
+  - 27
+  opts:
+  - ''
+  sector_opts:
+  - none
+  planning_horizons:
+  - 2045
+
+fix_foreign_investments:
+  enable: false
+
+clustering:
+  temporal:
+    # Daily resolution keeps seasonal PTES dynamics and boosting hours visible
+    # while staying solvable quickly for 7 scenarios.
+    resolution_sector: 24H
+
+co2_budget:
+  2045: 0.00
+
+sector:
+  district_heating:
+    # A higher DH share makes PTES deployment attractive enough that the
+    # feature paths are actually exercised in the optimum.
+    potential:
+      DE: 0.4
+    # Exercise the Picard-consistent heat-pump cooling in all scenarios.
+    heat_pump_cooling_iterative: true
