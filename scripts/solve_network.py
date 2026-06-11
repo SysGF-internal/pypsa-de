@@ -1086,7 +1086,9 @@ def add_layered_ptes_heat_pump_capacity_constraint(
 
     exprs = []
     for dummy in dummy_hps:
-        node_prefix = dummy.replace(" ptes heat pump", "")
+        # split (not replace) so a myopic build-year suffix on the dummy name
+        # ('... ptes heat pump-2045') does not end up inside the node prefix
+        node_prefix = dummy.split(" ptes heat pump")[0]
         matching = layer_hps[layer_hps.str.startswith(node_prefix + " ptes layer")]
         layer_sum = sum(n.model["Link-p_nom"].loc[hp] for hp in matching)
         dummy_p_nom = n.model["Link-p_nom"].loc[dummy]
@@ -1207,7 +1209,9 @@ def add_layered_ptes_aggregate_throughput_constraint(
         # m3/h and is converted with the discharged layer's m3-to-MWh factor.
         weighted_sum = sum(n.model["Link-p"].loc[:, ch] for ch in chargers)
         for dis in dischargers:
-            layer_idx = int(dis.rsplit("layer ", 1)[-1])
+            # regex instead of a split so a myopic build-year suffix
+            # ('... discharger layer 2-2045') does not break the layer index
+            layer_idx = int(re.search(r"discharger layer (\d+)", dis).group(1))
             m3_to_mwh = float(ptes_ds["m3_to_mwh"].sel(layer=layer_idx).item())
             weighted_sum = weighted_sum + m3_to_mwh * n.model["Link-p"].loc[:, dis]
 
