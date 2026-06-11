@@ -1174,9 +1174,14 @@ def add_layered_ptes_aggregate_throughput_constraint(
     p_ch/p_dis the layer charger/discharger operational power, and ē_nom the aggregate
     store capacity.
     """
+    # Layered chargers are named '<node> ... water pits charger layer {dest}
+    # from layer {src}' (one per valid destination/source pair); dischargers
+    # '<node> ... water pits discharger layer {l}' (one per non-bottom layer).
     layer_chargers = n.links.index[
-        n.links.index.str.contains("water pits charger")
-        & n.links.index.str.contains("layer")
+        n.links.index.str.contains("water pits charger layer")
+    ]
+    layer_dischargers = n.links.index[
+        n.links.index.str.contains("water pits discharger layer")
     ]
     agg_stores = n.stores.index[
         n.stores.index.str.contains("water pits")
@@ -1189,22 +1194,22 @@ def add_layered_ptes_aggregate_throughput_constraint(
         prefix = agg.split("water pits")[0] + "water pits"
 
         chargers = layer_chargers[layer_chargers.str.startswith(prefix + " charger")]
-        dischargers = pd.Index(
-            [c.replace(" charger ", " discharger ") for c in chargers]
-        ).intersection(n.links.index)
-        if chargers.empty or dischargers.empty:
+        dischargers = layer_dischargers[
+            layer_dischargers.str.startswith(prefix + " discharger")
+        ]
+        if chargers.empty:
             continue
 
         e2p_ratio = n.links.at[chargers[0], "energy to power ratio"]
 
-        weighted_sum = None
-        for ch, dis in zip(chargers, dischargers):
-            layer_idx = int(ch.rsplit("layer ", 1)[-1])
+        # Charger p is already on the heat side [MW] (bus0 = DH heat) and
+        # equals the bottom-referenced stored-energy gain; discharger p is in
+        # m3/h and is converted with the discharged layer's m3-to-MWh factor.
+        weighted_sum = sum(n.model["Link-p"].loc[:, ch] for ch in chargers)
+        for dis in dischargers:
+            layer_idx = int(dis.rsplit("layer ", 1)[-1])
             m3_to_mwh = float(ptes_ds["m3_to_mwh"].sel(layer=layer_idx).item())
-            term = (
-                n.model["Link-p"].loc[:, ch] + m3_to_mwh * n.model["Link-p"].loc[:, dis]
-            )
-            weighted_sum = term if weighted_sum is None else weighted_sum + term
+            weighted_sum = weighted_sum + m3_to_mwh * n.model["Link-p"].loc[:, dis]
 
         # Charge/discharge power is limited to capacity / (energy-to-power ratio):
         #   Σ_l C_l (p_ch + p_dis) ≤ ē_nom / R   ∀ t,
