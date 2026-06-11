@@ -3,23 +3,26 @@
 # SPDX-License-Identifier: CC0-1.0
 
 run:
-  prefix: 20250514_dhsubnodes
+  prefix: 20260508_dhshare_explore
   name:
-  - NoPTES_MidSupplyTemperature_MidDH_init
-  - NoPTES_MidSupplyTemperature_MidDH
-  - MidSupplyTemperature_MidDH_hpboost_10Cbottom
+  - DHShareDE_00pct_copperplate
+  - DHShareDE_00pct
+  - DHShareDE_10pct
+  - DHShareDE_20pct
+  - DHShareDE_50pct
+  - DHShareDE_75pct
   scenarios:
     enable: true
-    manual_file: config/scenarios.sysgf.yaml
-    file: config/scenarios.automated.yaml
+    manual_file: config/scenarios.sysgf_dh_share.yaml
+    file: config/scenarios.automated.sysgf_dh_share.yaml
   shared_resources:
-    policy: base #stops recalculating
+    policy: base
     exclude:
-    - existing_heating.csv   # specify files which should not be shared between scenarios
+    - existing_heating.csv
     - costs
-    - retrieve_cost   # This is necessary to save retrieve_cost_data_{year}.log in the correct folder
+    - retrieve_cost
     - industry_sector_ratios
-    - build_industry_sector_ratios   # This is necessary to save build_industry_sector_ratios_data.log in the correct folder
+    - build_industry_sector_ratios
     - modify_existing_heating
 
 remote:
@@ -32,25 +35,17 @@ scenario:
   ll:
   - vopt
   clusters:
-  - 27 #current options: 27, 49
+  - 27
   opts:
   - ''
   sector_opts:
   - none
   planning_horizons:
-  # - 2020
-  # - 2025
-  # - 2030
-  # - 2035
-  # - 2040
   - 2045
 
 fix_foreign_investments:
   enable: false
-  # Default reference; individual scenarios in config/scenarios.sysgf.yaml
-  # override this with their own family-specific reference (e.g. the "_init"
-  # run of the same temperature/DH bucket).
-  reference_scenario: NoPTES_MidSupplyTemperature_MidDH
+  reference_scenario: DHShareDE_00pct
   nom_min: true
   nom_max: true
   lines_only: false
@@ -59,7 +54,7 @@ fix_foreign_investments:
 
 clustering:
   temporal:
-    resolution_sector: 365H
+    resolution_sector: 5H
 
 co2_budget:
   2045: 0.00
@@ -73,26 +68,6 @@ adjustments:
           standing_loss: 0.000078
         urban central water tanks:
           standing_loss: 0.000077
-    ### Additional adjustments to scale heat pump costs in relation to air source heat pumps
-    # factor:
-    #   Link:
-    #     urban central air heat pump:
-    #       marginal_cost: 1.8
-    #     urban central geothermal heat pump:
-    #       capital_cost: 0.66
-    #       marginal_cost: 2.02
-    #     urban central river_water heat pump:
-    #       capital_cost: 0.86
-    #       marginal_cost: 1.8
-    #     urban central sea_water heat pump:
-    #       capital_cost: 0.86
-    #       marginal_cost: 1.8
-    #     urban central electrolysis excess heat pump:
-    #       capital_cost: 0.76
-    #       marginal_cost: 1.8
-    #     urban central ptes heat pump:
-    #       capital_cost: 0.66
-    #       marginal_cost: 1.8
 
 electricity:
   renewable_carriers: [solar, solar-hsat, onwind, offwind-ac, offwind-dc, hydro]
@@ -105,8 +80,8 @@ sector:
     enable: true
   district_heating:
     potential:
-      DE: 0.5
-      default: 0.5
+      DE: 0.35
+      default: 0.35
     progress:
       2045: 1.0
     supply_temperature_approximation:
@@ -129,9 +104,9 @@ sector:
       relative_annual_temperature_reduction: 0.01
     subnodes:
       enable: true
-      n_subnodes: 40
-      demand_share: null
-      countries: []
+      n_subnodes: 0
+      demand_share: 0.0
+      countries: [DE]
       demand_column: Dem_GWh
       label_column: Label
       use_isi_data_assumptions: false
@@ -194,7 +169,23 @@ sector:
     - electrolysis_waste
     - fuel_cell_waste
     - fischer_tropsch_waste
-    - haber_bosch_waste
+    - sabatier_waste
+    - methanolisation_waste
+    urban decentral:
+    - air
+    rural:
+    - air
+    - ground
+  heat_sources:
+    urban central:
+    - air
+    - ptes
+    - geothermal
+    - river_water
+    - sea_water
+    - electrolysis_waste
+    - fuel_cell_waste
+    - fischer_tropsch_waste
     - sabatier_waste
     - methanolisation_waste
     urban decentral:
@@ -217,20 +208,15 @@ solving:
     limits_power_max: {}
 
 pypsa-de:
-  # Reference scenario for sysgf cross-scenario plots (run scenario name, not Ariadne name)
-  sysgf_reference_scenario: NoPTES_MidSupplyTemperature_MidDH
+  sysgf_reference_scenario: DHShareDE_00pct
   sensitivity_runs: []
   plotting:
-    # Pairs of (scenario, no_ptes_reference) used in cost-impact and summary plots
-    scenario_tuples:
-      - [MidSupplyTemperature_MidDH_hpboost_10Cbottom, NoPTES_MidSupplyTemperature_MidDH]
+    scenario_tuples: []
     override_tech_colors: {}
     drop_losses: true
     subnodes_only: true
     aggregate_threshold_pct: 0.025
     n_price_ventiles: 20
-    # Explicit carrier-to-group mapping. Carriers listed under a group name are
-    # summed into that group in the order defined. Carriers not listed are kept as-is.
     carrier_groups:
       CHP:
         - urban central gas CHP

@@ -96,11 +96,12 @@ class _PtesConfig(BaseModel):
         "`<node> urban central water pits` as well as the links `<node> urban central water pits charger` "
         "and `<node> urban central water pits discharger`. Important note: PTES discharge must be boosted when its top temperature is below the network forward temperature. This requires adding PTES as a heat source in urban central heating.",
     )
-    temperature_dependent_capacity: bool = Field(
+    dynamic_capacity: bool = Field(
         False,
-        description="If True, the energy capacity is scaled as "
-        "`e_nom_pu=(top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature)`. "
-        "See `build_ptes_operations`.",
+        description="Carry the time-varying e_max_pu profile over between myopic "
+        "planning horizons in `add_brownfield`. Only meaningful with dynamic "
+        "('forward'/'return') top/bottom temperatures, where the capacity "
+        "scaling follows the district heating network temperatures.",
     )
     charge_boosting_required: bool = Field(
         False,

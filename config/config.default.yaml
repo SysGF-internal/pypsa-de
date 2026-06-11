@@ -663,11 +663,17 @@ sector:
       clip_forward_temperature: null
     ptes:
       enable: true
-      temperature_dependent_capacity: false
       charge_boosting_required: false
       discharge_resistive_boosting: false
+      # Constant temperatures [°C], or 'forward'/'return' to follow the DH
+      # network profiles dynamically (top clipped to design_top_temperature).
+      # With dynamic temperatures the capacity scaling e_max_pu becomes a
+      # time-varying profile (simple energy-only model only).
       top_temperature: 90
       bottom_temperature: 35
+      # Carry the time-varying e_max_pu profile over between myopic horizons
+      # in add_brownfield (only meaningful with dynamic temperatures).
+      dynamic_capacity: false
       design_top_temperature: 90
       design_bottom_temperature: 35
       # Source-side temperature drop ΔT [K] of the PTES booster heat pump: how far

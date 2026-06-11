@@ -3343,7 +3343,18 @@ def add_heat(
             energy_to_power_ratio_water_pit = costs.at[
                 "central water pit storage", "energy to power ratio"
             ]
-            e_max_pu = float(ptes_ds["e_max_pu"])
+            # Capacity scaling against the design temperature spread: a scalar
+            # for constant top/bottom temperatures, or a (time, name) profile
+            # when 'forward'/'return' dynamic temperatures are configured.
+            e_max_pu = ptes_ds["e_max_pu"]
+            if e_max_pu.ndim == 0:
+                e_max_pu = float(e_max_pu)
+            else:
+                e_max_pu = (
+                    e_max_pu.transpose("time", "name")
+                    .to_pandas()
+                    .reindex(index=n.snapshots, columns=heat_nodes)
+                )
 
             # Discharge boosting mode: resistive boosting instead of booster
             # heat pumps. Discharged volume then never cools below the return
@@ -3647,6 +3658,9 @@ def add_heat(
                     carrier=f"{heat_system} water pits",
                     unit="m3",
                 )
+                # No e_max_pu here: the aggregate store only carries capacity
+                # and cost (its own SOC is unused); the layered volume model
+                # handles operating temperatures intrinsically.
                 n.add(
                     "Store",
                     heat_nodes,
@@ -3655,7 +3669,6 @@ def add_heat(
                     e_cyclic=True,
                     e_nom_extendable=True,
                     e_nom_max=ptes_potentials.reindex(heat_nodes).fillna(np.inf),
-                    e_max_pu=e_max_pu,
                     carrier=f"{heat_system} water pits",
                     standing_loss=costs.at[
                         "central water pit storage", "standing_losses"

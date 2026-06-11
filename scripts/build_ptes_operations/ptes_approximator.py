@@ -46,8 +46,39 @@ class PtesApproximator:
         # Operating spread comes from the configured top/bottom temperatures (the
         # physical store boundaries), not from the layer list -- a single-layer
         # configuration [90] would otherwise give a zero spread.
-        self.top_temperature = float(top_temperature)
-        self.bottom_temperature = float(bottom_temperature)
+        # 'forward'/'return' select dynamic profiles from the district heating
+        # network (top clipped to the design top temperature); numeric values
+        # give constant temperatures.
+        self._top_temperature_spec = top_temperature
+        self._bottom_temperature_spec = bottom_temperature
+        if isinstance(top_temperature, str):
+            if top_temperature != "forward":
+                raise ValueError(
+                    f"Invalid top_temperature: {top_temperature!r}. "
+                    "Must be 'forward' or a numeric value."
+                )
+            self.top_temperature = forward_temperature.clip(
+                max=design_top_temperature
+            )
+        else:
+            self.top_temperature = float(top_temperature)
+        if isinstance(bottom_temperature, str):
+            if bottom_temperature != "return":
+                raise ValueError(
+                    f"Invalid bottom_temperature: {bottom_temperature!r}. "
+                    "Must be 'return' or a numeric value."
+                )
+            self.bottom_temperature = return_temperature
+        else:
+            self.bottom_temperature = float(bottom_temperature)
+        if self.is_layered and (
+            isinstance(top_temperature, str) or isinstance(bottom_temperature, str)
+        ):
+            raise ValueError(
+                "Dynamic top/bottom temperatures ('forward'/'return') are not "
+                "supported by the layered volume model; layer temperatures are "
+                "fixed constants."
+            )
         # Coldest modelled layer: the m3 -> MWh reference for the volume model.
         self.coldest_layer_temperature = float(layer_temperatures[-1])
         self.design_top_temperature = design_top_temperature
@@ -136,16 +167,24 @@ class PtesApproximator:
         )
 
     @property
-    def e_max_pu(self) -> float:
-        """Scalar PTES capacity scaling against design temperature spread."""
+    def e_max_pu(self) -> float | xr.DataArray:
+        """
+        PTES capacity scaling against the design temperature spread.
+
+        A scalar for constant top/bottom temperatures; a (time, name) profile
+        when 'forward'/'return' dynamic temperatures are configured, so the
+        usable capacity follows the district heating network temperatures.
+        """
         design_delta_t = self.design_top_temperature - self.design_bottom_temperature
         if design_delta_t <= 0:
             raise ValueError(
                 "design_top_temperature must be larger than design_bottom_temperature"
             )
 
-        operational_delta_t = self.top_temperature - self.bottom_temperature
-        return max(operational_delta_t / design_delta_t, 0.0)
+        ratio = (self.top_temperature - self.bottom_temperature) / design_delta_t
+        if isinstance(ratio, xr.DataArray):
+            return ratio.clip(min=0.0)
+        return max(ratio, 0.0)
 
     @property
     def return_temp_layer(self) -> xr.DataArray:
@@ -507,8 +546,9 @@ class PtesApproximator:
                 "num_layers": self.num_layers,
                 "is_layered": int(self.is_layered),
                 "booster_source_dt": self.booster_source_dt,
-                "top_temperature": self.top_temperature,
-                "bottom_temperature": self.bottom_temperature,
+                # the configured spec ('forward'/'return' or the numeric value)
+                "top_temperature": self._top_temperature_spec,
+                "bottom_temperature": self._bottom_temperature_spec,
                 "storage_height": 15,  # m, assumed for interlayer coefficient calculation
                 "design_top_temperature": self.design_top_temperature,
                 "design_bottom_temperature": self.design_bottom_temperature,
