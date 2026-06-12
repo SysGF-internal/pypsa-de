@@ -75,8 +75,12 @@ co2_budget:
 sector:
   district_heating:
     # A higher DH share makes PTES deployment attractive enough that the
-    # feature paths are actually exercised in the optimum.
+    # feature paths are actually exercised in the optimum. The dict form
+    # requires a default for the non-DE countries.
     potential:
       DE: 0.4
+      default: 0.4
+    # The ISI geothermal dataset does not cover non-EU27 regions (GB).
+    ignore_missing_geothermal_data: true
     # Exercise the Picard-consistent heat-pump cooling in all scenarios.
     heat_pump_cooling_iterative: true
