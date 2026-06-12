@@ -4386,13 +4386,22 @@
               "type": "object"
             },
             "heat_source_cooling": {
-              "default": 6,
-              "description": "Cooling of heat source for heat pumps [K]. For preheating central sources this is the starting guess of the iterative solve (see heat_pump_cooling_iterative); for all other sources it is the flat cooling value.",
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                }
+              ],
+              "description": "Typical source-side cooling dT [K] applied by the heat pump: either a flat scalar for all sources or a per-source mapping with a required 'default' entry covering unlisted sources (PTES layer sources fall back to a 'ptes' entry before the default). With heat_pump_cooling_iterative this value seeds the iterative solve for preheating central sources."
             },
             "heat_pump_cooling_iterative": {
-              "default": true,
-              "description": "Solve the source-side cooling and the COP consistently for preheating central heat sources via fixed-point (Picard) iteration of dT_cool = (COP - 1)/COP * (T_forward - T_source). If False, the flat heat_source_cooling value is used for all sources.",
+              "default": false,
+              "description": "Optional alternative to the fixed typical cooling: solve the source-side cooling and the COP consistently for preheating central heat sources via fixed-point (Picard) iteration of dT_cool = (COP - 1)/COP * (T_forward - T_source), seeded from the typical heat_source_cooling value.",
               "type": "boolean"
             },
             "log_heat_pump_cooling_iterations": {
@@ -6614,13 +6623,22 @@
           "type": "object"
         },
         "heat_source_cooling": {
-          "default": 6,
-          "description": "Cooling of heat source for heat pumps [K]. For preheating central sources this is the starting guess of the iterative solve (see heat_pump_cooling_iterative); for all other sources it is the flat cooling value.",
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            }
+          ],
+          "description": "Typical source-side cooling dT [K] applied by the heat pump: either a flat scalar for all sources or a per-source mapping with a required 'default' entry covering unlisted sources (PTES layer sources fall back to a 'ptes' entry before the default). With heat_pump_cooling_iterative this value seeds the iterative solve for preheating central sources."
         },
         "heat_pump_cooling_iterative": {
-          "default": true,
-          "description": "Solve the source-side cooling and the COP consistently for preheating central heat sources via fixed-point (Picard) iteration of dT_cool = (COP - 1)/COP * (T_forward - T_source). If False, the flat heat_source_cooling value is used for all sources.",
+          "default": false,
+          "description": "Optional alternative to the fixed typical cooling: solve the source-side cooling and the COP consistently for preheating central heat sources via fixed-point (Picard) iteration of dT_cool = (COP - 1)/COP * (T_forward - T_source), seeded from the typical heat_source_cooling value.",
           "type": "boolean"
         },
         "log_heat_pump_cooling_iterations": {
@@ -11227,13 +11245,22 @@
               "type": "object"
             },
             "heat_source_cooling": {
-              "default": 6,
-              "description": "Cooling of heat source for heat pumps [K]. For preheating central sources this is the starting guess of the iterative solve (see heat_pump_cooling_iterative); for all other sources it is the flat cooling value.",
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                }
+              ],
+              "description": "Typical source-side cooling dT [K] applied by the heat pump: either a flat scalar for all sources or a per-source mapping with a required 'default' entry covering unlisted sources (PTES layer sources fall back to a 'ptes' entry before the default). With heat_pump_cooling_iterative this value seeds the iterative solve for preheating central sources."
             },
             "heat_pump_cooling_iterative": {
-              "default": true,
-              "description": "Solve the source-side cooling and the COP consistently for preheating central heat sources via fixed-point (Picard) iteration of dT_cool = (COP - 1)/COP * (T_forward - T_source). If False, the flat heat_source_cooling value is used for all sources.",
+              "default": false,
+              "description": "Optional alternative to the fixed typical cooling: solve the source-side cooling and the COP consistently for preheating central heat sources via fixed-point (Picard) iteration of dT_cool = (COP - 1)/COP * (T_forward - T_source), seeded from the typical heat_source_cooling value.",
               "type": "boolean"
             },
             "log_heat_pump_cooling_iterations": {

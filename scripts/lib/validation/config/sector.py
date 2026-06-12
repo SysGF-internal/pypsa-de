@@ -333,20 +333,33 @@ class _DistrictHeatingConfig(ConfigModel):
         },
         description="Aquifer thermal energy storage settings.",
     )
-    heat_source_cooling: float = Field(
-        6,
-        description="Cooling of heat source for heat pumps [K]. For preheating "
-        "central sources this is the starting guess of the iterative solve "
-        "(see heat_pump_cooling_iterative); for all other sources it is the "
-        "flat cooling value.",
+    heat_source_cooling: float | dict[str, float] = Field(
+        default_factory=lambda: {"default": 6.0, "geothermal": 15.0},
+        description="Typical source-side cooling dT [K] applied by the heat "
+        "pump: either a flat scalar for all sources or a per-source mapping "
+        "with a required 'default' entry covering unlisted sources (PTES "
+        "layer sources fall back to a 'ptes' entry before the default). With "
+        "heat_pump_cooling_iterative this value seeds the iterative solve for "
+        "preheating central sources.",
     )
     heat_pump_cooling_iterative: bool = Field(
-        True,
-        description="Solve the source-side cooling and the COP consistently for "
-        "preheating central heat sources via fixed-point (Picard) iteration of "
-        "dT_cool = (COP - 1)/COP * (T_forward - T_source). If False, the flat "
-        "heat_source_cooling value is used for all sources.",
+        False,
+        description="Optional alternative to the fixed typical cooling: solve "
+        "the source-side cooling and the COP consistently for preheating "
+        "central heat sources via fixed-point (Picard) iteration of "
+        "dT_cool = (COP - 1)/COP * (T_forward - T_source), seeded from the "
+        "typical heat_source_cooling value.",
     )
+
+    @field_validator("heat_source_cooling")
+    @classmethod
+    def validate_heat_source_cooling(cls, v):
+        if isinstance(v, dict) and "default" not in v:
+            raise ValueError(
+                "heat_source_cooling given as a mapping requires a 'default' "
+                "entry for unlisted heat sources"
+            )
+        return v
     log_heat_pump_cooling_iterations: bool = Field(
         False,
         description="Debugging aid: write the full per-node, per-timestep, "

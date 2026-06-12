@@ -9,18 +9,21 @@ This rule merges the former ``build_cop_profiles`` and
 cooling the heat pump applies to its source, so they are computed together
 from one consistent value.
 
-For preheating heat sources (e.g. geothermal) the cooling is not a free
-parameter: with one source stream, a preheater followed by the evaporator and
-equal mass flows on both sides, the heat pump's energy balance ties it to the
-lift and the COP:
+By default each source gets a fixed, typical source-side cooling from
+``heat_source_cooling`` -- either a flat scalar or a per-source mapping with a
+``default`` entry (e.g. 15 K for geothermal, 6 K for PtX waste heat).
+
+Alternatively, ``heat_pump_cooling_iterative`` solves the cooling and the COP
+consistently for preheating central sources (e.g. geothermal): with one source
+stream, a preheater followed by the evaporator and equal mass flows on both
+sides, the heat pump's energy balance ties the cooling to the lift and the COP:
 
     dT_cool = (COP - 1) / COP * (T_forward - T_source)
 
 while the COP itself depends on dT_cool through the source outlet temperature.
-When ``heat_pump_cooling_iterative`` is enabled, :func:`compute_heat_pump_cooling`
-solves the two consistently by fixed-point (Picard) iteration, seeded from the
-flat ``heat_source_cooling`` value. Otherwise -- and for non-preheating sources
-and decentral systems -- the flat value is used, as before.
+:func:`compute_heat_pump_cooling` resolves the two by fixed-point (Picard)
+iteration, seeded from the typical value. Non-preheating sources and decentral
+systems always use the typical value.
 
 COP values below 1 are set to zero (infeasible operating conditions). Central
 heating uses the Jensen et al. (2018) thermodynamic model
@@ -349,6 +352,43 @@ def expand_heat_sources_for_ptes_layers(
     }
 
 
+def resolve_heat_source_cooling(
+    cooling_config: float | dict, heat_source_name: str
+) -> float:
+    """
+    Typical source-side cooling dT_cool [K] for one heat source.
+
+    ``heat_source_cooling`` is either a flat scalar for all sources or a
+    per-source mapping with a required ``default`` entry, e.g.::
+
+        heat_source_cooling:
+          default: 6
+          geothermal: 15
+
+    PTES layer sources ('ptes layer N') fall back to a ``ptes`` entry before
+    the default.
+
+    Parameters
+    ----------
+    cooling_config : float | dict
+        The ``sector.district_heating.heat_source_cooling`` setting.
+    heat_source_name : str
+        Name of the heat source (e.g. 'geothermal', 'ptes layer 2').
+
+    Returns
+    -------
+    float
+        Source-side cooling depth in K.
+    """
+    if not isinstance(cooling_config, dict):
+        return float(cooling_config)
+    if heat_source_name in cooling_config:
+        return float(cooling_config[heat_source_name])
+    if heat_source_name.startswith("ptes layer") and "ptes" in cooling_config:
+        return float(cooling_config["ptes"])
+    return float(cooling_config["default"])
+
+
 def compute_heat_pump_cooling(
     heat_system_type: str,
     heat_source: str,
@@ -490,10 +530,14 @@ if __name__ == "__main__":
                 central_heating_return_temperature=central_heating_return_temperature,
             )
 
-            # Preheating sources solve the operating-point-consistent cooling
-            # (when enabled), seeded from the flat heat_source_cooling value.
-            # Otherwise (toggle off, non-preheating, or decentral) the flat
-            # heat_source_cooling constant is used, as before.
+            # Default: a fixed, source-typical cooling from heat_source_cooling
+            # (scalar or per-source mapping). When heat_pump_cooling_iterative
+            # is enabled, preheating central sources instead solve the
+            # operating-point-consistent cooling, seeded from that typical
+            # value.
+            typical_cooling = resolve_heat_source_cooling(
+                snakemake.params.heat_source_cooling, heat_source_name
+            )
             if (
                 snakemake.params.heat_pump_cooling_iterative
                 and HeatSystemType(heat_system_type).is_central
@@ -506,13 +550,13 @@ if __name__ == "__main__":
                     source_temperature=source_temperature_celsius,
                     source_inlet_temperature=source_inlet_temperature_celsius,
                     sink_inlet_temperature=sink_inlet_temperature_celsius,
-                    initial_cooling=snakemake.params.heat_source_cooling,
+                    initial_cooling=typical_cooling,
                     iteration_log=cooling_iteration_log,
                 )
             else:
                 heat_pump_cooling = xr.full_like(
                     central_heating_forward_temperature,
-                    snakemake.params.heat_source_cooling,
+                    typical_cooling,
                 )
 
             if heat_system_type == HeatSystemType.URBAN_CENTRAL.value:

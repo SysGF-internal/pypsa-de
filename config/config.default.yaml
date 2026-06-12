@@ -713,11 +713,15 @@ sector:
       recovery_factor: 0.6
       marginal_cost_charger: 0.035
       ignore_missing_regions: false
-    heat_source_cooling: 6
-    # Solve the source-side cooling and the COP consistently for preheating
-    # central heat sources via fixed-point (Picard) iteration, seeded from
-    # heat_source_cooling. false keeps the flat heat_source_cooling value.
-    heat_pump_cooling_iterative: true
+    # Typical source-side cooling dT [K] applied by the heat pump, per source
+    # ('default' covers unlisted sources, e.g. PtX waste heat at 6 K).
+    heat_source_cooling:
+      default: 6
+      geothermal: 15
+    # Optional alternative: solve the source-side cooling and the COP
+    # consistently for preheating central heat sources via fixed-point
+    # (Picard) iteration, seeded from the typical heat_source_cooling value.
+    heat_pump_cooling_iterative: false
     # Debugging aid: write the per-iteration cooling/COP trace to
     # heat_pump_cooling_iterations_<...>.csv next to the COP profiles.
     log_heat_pump_cooling_iterations: false
