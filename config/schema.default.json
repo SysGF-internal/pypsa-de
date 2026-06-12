@@ -4397,6 +4397,7 @@
                   "type": "object"
                 }
               ],
+              "default": 6,
               "description": "Typical source-side cooling dT [K] applied by the heat pump: either a flat scalar for all sources or a per-source mapping with a required 'default' entry covering unlisted sources (PTES layer sources fall back to a 'ptes' entry before the default). With heat_pump_cooling_iterative this value seeds the iterative solve for preheating central sources."
             },
             "heat_pump_cooling_iterative": {
@@ -6634,6 +6635,7 @@
               "type": "object"
             }
           ],
+          "default": 6,
           "description": "Typical source-side cooling dT [K] applied by the heat pump: either a flat scalar for all sources or a per-source mapping with a required 'default' entry covering unlisted sources (PTES layer sources fall back to a 'ptes' entry before the default). With heat_pump_cooling_iterative this value seeds the iterative solve for preheating central sources."
         },
         "heat_pump_cooling_iterative": {
@@ -11256,6 +11258,7 @@
                   "type": "object"
                 }
               ],
+              "default": 6,
               "description": "Typical source-side cooling dT [K] applied by the heat pump: either a flat scalar for all sources or a per-source mapping with a required 'default' entry covering unlisted sources (PTES layer sources fall back to a 'ptes' entry before the default). With heat_pump_cooling_iterative this value seeds the iterative solve for preheating central sources."
             },
             "heat_pump_cooling_iterative": {

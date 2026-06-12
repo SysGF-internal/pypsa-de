@@ -92,5 +92,5 @@ sector:
       default: 0.4
     # The ISI geothermal dataset does not cover non-EU27 regions (GB).
     ignore_missing_geothermal_data: true
-    # Exercise the Picard-consistent heat-pump cooling in all scenarios.
-    heat_pump_cooling_iterative: true
+    # Fixed typical heat-pump cooling (no Picard iteration).
+    heat_pump_cooling_iterative: false

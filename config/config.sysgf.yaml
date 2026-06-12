@@ -144,6 +144,8 @@ sector:
           buffer_factor: [0.01, 0.05, 0.05, 0]
           buffer_absolute: 5
     ignore_missing_geothermal_data: true
+    # Fixed typical heat-pump cooling (no Picard iteration).
+    heat_pump_cooling_iterative: false
     limited_heat_sources:
       geothermal:
         ignore_missing_regions: true

@@ -713,11 +713,10 @@ sector:
       recovery_factor: 0.6
       marginal_cost_charger: 0.035
       ignore_missing_regions: false
-    # Typical source-side cooling dT [K] applied by the heat pump, per source
-    # ('default' covers unlisted sources, e.g. PtX waste heat at 6 K).
-    heat_source_cooling:
-      default: 6
-      geothermal: 15
+    # Typical source-side cooling dT [K] applied by the heat pump. Either a
+    # flat scalar or a per-source mapping with a required 'default' entry,
+    # e.g. {default: 6, geothermal: 15}.
+    heat_source_cooling: 6
     # Optional alternative: solve the source-side cooling and the COP
     # consistently for preheating central heat sources via fixed-point
     # (Picard) iteration, seeded from the typical heat_source_cooling value.

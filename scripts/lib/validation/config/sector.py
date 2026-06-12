@@ -334,7 +334,7 @@ class _DistrictHeatingConfig(ConfigModel):
         description="Aquifer thermal energy storage settings.",
     )
     heat_source_cooling: float | dict[str, float] = Field(
-        default_factory=lambda: {"default": 6.0, "geothermal": 15.0},
+        6,
         description="Typical source-side cooling dT [K] applied by the heat "
         "pump: either a flat scalar for all sources or a per-source mapping "
         "with a required 'default' entry covering unlisted sources (PTES "
