@@ -28,12 +28,6 @@ PTESoff:
       urban central:
       - air
       - geothermal
-      - electrolysis_waste
-      - fuel_cell_waste
-      - fischer_tropsch_waste
-      - haber_bosch_waste
-      - sabatier_waste
-      - methanolisation_waste
     district_heating:
       ptes:
         enable: false

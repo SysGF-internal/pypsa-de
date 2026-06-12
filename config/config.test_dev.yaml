@@ -73,6 +73,16 @@ co2_budget:
   2045: 0.00
 
 sector:
+  # Restrict to sources whose prerequisites exist in this setup: the default
+  # list includes PTX waste-heat sources whose process links (e.g.
+  # Haber-Bosch with ammonia disabled in config.de.yaml) are not built here,
+  # which add_waste_heat rejects. air/geothermal/ptes cover the feature
+  # paths under test (ambient, Picard preheating, storage).
+  heat_sources:
+    urban central:
+    - air
+    - ptes
+    - geothermal
   district_heating:
     # A higher DH share makes PTES deployment attractive enough that the
     # feature paths are actually exercised in the optimum. The dict form
