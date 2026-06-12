@@ -1,0 +1,273 @@
+# SPDX-FileCopyrightText: : 2026 PyPSA-DE authors
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# Scenario matrix for the temperature-blindness showcase
+# (used with config/config.showcase.yaml; see there for the study design).
+#
+# 4 network temperature levels x (NoPTES_init, NoPTES, battery, unstrat,
+# layered). Building blocks are defined once as anchors below and composed
+# per scenario; only the DE temperatures vary, all other countries keep the
+# defaults.
+
+# --- building blocks (ignored by build_scenarios: not in run.name) ----------
+
+.network_temperatures:
+  t109: &temps_t109
+    supply_temperature_approximation:
+      max_forward_temperature_baseyear:
+        DE: 109
+      min_forward_temperature_baseyear:
+        DE: 82
+      return_temperature_baseyear:
+        DE: 58
+  t95: &temps_t95
+    supply_temperature_approximation:
+      max_forward_temperature_baseyear:
+        DE: 95
+      min_forward_temperature_baseyear:
+        DE: 75
+      return_temperature_baseyear:
+        DE: 50
+  t80: &temps_t80
+    supply_temperature_approximation:
+      max_forward_temperature_baseyear:
+        DE: 80
+      min_forward_temperature_baseyear:
+        DE: 65
+      return_temperature_baseyear:
+        DE: 40
+  t70: &temps_t70
+    supply_temperature_approximation:
+      max_forward_temperature_baseyear:
+        DE: 70
+      min_forward_temperature_baseyear:
+        DE: 55
+      return_temperature_baseyear:
+        DE: 35
+
+.ptes_models:
+  # No PTES at all (counterfactual): disabled and out of the heat sources.
+  noptes: &ptes_off
+    heat_sources:
+      urban central:
+      - air
+      - geothermal
+  noptes_dh: &ptes_off_dh
+    ptes:
+      enable: false
+  # Battery-like: energy-only store whose top temperature exceeds any network
+  # forward temperature, so it never needs boosting and never sees the
+  # network temperature -- a plain heat battery.
+  battery: &ptes_battery
+    ptes:
+      enable: true
+      temperature_dependent_capacity: false
+      discharge_resistive_boosting: false
+      top_temperature: 120
+      bottom_temperature: 35
+      layered:
+        enable: false
+        layer_temperatures: [120]
+  # Unstratified single-temperature store at 90 C with booster heat pump
+  # (the preprint approach): boosting whenever forward T exceeds 90 C, but no
+  # vertical temperature structure inside the pit.
+  unstrat: &ptes_unstrat
+    ptes:
+      enable: true
+      temperature_dependent_capacity: false
+      discharge_resistive_boosting: false
+      top_temperature: 90
+      bottom_temperature: 35
+      layered:
+        enable: false
+        layer_temperatures: [90]
+  # Layered volume model with per-layer booster heat pumps. The 25 C layer
+  # keeps a deposit target below the return temperature also at the lowest
+  # network level (ret 35 C).
+  layered: &ptes_layered
+    ptes:
+      enable: true
+      temperature_dependent_capacity: false
+      discharge_resistive_boosting: false
+      top_temperature: 90
+      bottom_temperature: 35
+      layered:
+        enable: true
+        layer_temperatures: [90, 75, 60, 45, 35, 25]
+
+# --- T109: status quo --------------------------------------------------------
+
+NoPTES_T109_init:
+  fix_foreign_investments:
+    enable: false
+  sector:
+    <<: *ptes_off
+    district_heating:
+      <<: [*temps_t109, *ptes_off_dh]
+
+NoPTES_T109:
+  fix_foreign_investments:
+    enable: true
+    lines_only: true
+    reference_scenario: NoPTES_T109_init
+  sector:
+    <<: *ptes_off
+    district_heating:
+      <<: [*temps_t109, *ptes_off_dh]
+
+battery_T109:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T109
+  sector:
+    district_heating:
+      <<: [*temps_t109, *ptes_battery]
+
+unstrat_T109:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T109
+  sector:
+    district_heating:
+      <<: [*temps_t109, *ptes_unstrat]
+
+layered_T109:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T109
+  sector:
+    district_heating:
+      <<: [*temps_t109, *ptes_layered]
+
+# --- T95 ----------------------------------------------------------------------
+
+NoPTES_T95_init:
+  fix_foreign_investments:
+    enable: false
+  sector:
+    <<: *ptes_off
+    district_heating:
+      <<: [*temps_t95, *ptes_off_dh]
+
+NoPTES_T95:
+  fix_foreign_investments:
+    enable: true
+    lines_only: true
+    reference_scenario: NoPTES_T95_init
+  sector:
+    <<: *ptes_off
+    district_heating:
+      <<: [*temps_t95, *ptes_off_dh]
+
+battery_T95:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T95
+  sector:
+    district_heating:
+      <<: [*temps_t95, *ptes_battery]
+
+unstrat_T95:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T95
+  sector:
+    district_heating:
+      <<: [*temps_t95, *ptes_unstrat]
+
+layered_T95:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T95
+  sector:
+    district_heating:
+      <<: [*temps_t95, *ptes_layered]
+
+# --- T80 ----------------------------------------------------------------------
+
+NoPTES_T80_init:
+  fix_foreign_investments:
+    enable: false
+  sector:
+    <<: *ptes_off
+    district_heating:
+      <<: [*temps_t80, *ptes_off_dh]
+
+NoPTES_T80:
+  fix_foreign_investments:
+    enable: true
+    lines_only: true
+    reference_scenario: NoPTES_T80_init
+  sector:
+    <<: *ptes_off
+    district_heating:
+      <<: [*temps_t80, *ptes_off_dh]
+
+battery_T80:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T80
+  sector:
+    district_heating:
+      <<: [*temps_t80, *ptes_battery]
+
+unstrat_T80:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T80
+  sector:
+    district_heating:
+      <<: [*temps_t80, *ptes_unstrat]
+
+layered_T80:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T80
+  sector:
+    district_heating:
+      <<: [*temps_t80, *ptes_layered]
+
+# --- T70 ----------------------------------------------------------------------
+
+NoPTES_T70_init:
+  fix_foreign_investments:
+    enable: false
+  sector:
+    <<: *ptes_off
+    district_heating:
+      <<: [*temps_t70, *ptes_off_dh]
+
+NoPTES_T70:
+  fix_foreign_investments:
+    enable: true
+    lines_only: true
+    reference_scenario: NoPTES_T70_init
+  sector:
+    <<: *ptes_off
+    district_heating:
+      <<: [*temps_t70, *ptes_off_dh]
+
+battery_T70:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T70
+  sector:
+    district_heating:
+      <<: [*temps_t70, *ptes_battery]
+
+unstrat_T70:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T70
+  sector:
+    district_heating:
+      <<: [*temps_t70, *ptes_unstrat]
+
+layered_T70:
+  fix_foreign_investments:
+    enable: true
+    reference_scenario: NoPTES_T70
+  sector:
+    district_heating:
+      <<: [*temps_t70, *ptes_layered]

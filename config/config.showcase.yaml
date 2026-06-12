@@ -1,0 +1,127 @@
+# SPDX-FileCopyrightText: : 2026 PyPSA-DE authors
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# Showcase study: "What temperature blindness costs you."
+#
+# One capacity-expansion case run at four district-heating network temperature
+# levels (the decarbonisation trajectory of falling forward/return
+# temperatures), each with three PTES model fidelities plus a two-stage NoPTES
+# counterfactual:
+#
+#   NoPTES_<T>_init  free optimisation without PTES
+#   NoPTES_<T>       foreign transmission fixed from the _init run
+#   battery_<T>      PTES as a pure battery: energy only, no temperature,
+#                    no boosting (top temperature above any forward T)
+#   unstrat_<T>      single-temperature store at 90 C with booster heat pump
+#                    (the unstratified preprint approach)
+#   layered_<T>      the layered volume model with per-layer booster HPs
+#
+# All PTES runs fix foreign capacities from the NoPTES run of the same
+# temperature level, so within a level the runs differ only in the PTES
+# representation. Compare per level: PTES energy capacity, booster-HP capacity
+# and electricity use, displaced firm capacity, total system cost. Across
+# levels: model error vs network temperature (the headline figure).
+#
+# Scenario definitions: config/scenarios.showcase.yaml
+#
+# Usage:
+#   pixi run snakemake --configfile=config/config.showcase.yaml build_scenarios
+#   pixi run snakemake --profile slurm --configfile=config/config.showcase.yaml evaluate_ptes_feature_matrix
+
+run:
+  prefix: showcase_tblind
+  name:
+  # T109: status-quo DE network temperatures (fwd max 109 / min 82 / ret 58)
+  - NoPTES_T109_init
+  - NoPTES_T109
+  - battery_T109
+  - unstrat_T109
+  - layered_T109
+  # T95: fwd max 95 / min 75 / ret 50
+  - NoPTES_T95_init
+  - NoPTES_T95
+  - battery_T95
+  - unstrat_T95
+  - layered_T95
+  # T80: fwd max 80 / min 65 / ret 40
+  - NoPTES_T80_init
+  - NoPTES_T80
+  - battery_T80
+  - unstrat_T80
+  - layered_T80
+  # T70: fwd max 70 / min 55 / ret 35
+  - NoPTES_T70_init
+  - NoPTES_T70
+  - battery_T70
+  - unstrat_T70
+  - layered_T70
+  scenarios:
+    enable: true
+    manual_file: config/scenarios.showcase.yaml
+    file: config/scenarios.automated.showcase.yaml
+  shared_resources:
+    policy: base
+    exclude:
+    - existing_heating.csv
+    - costs
+    - retrieve_cost
+    - industry_sector_ratios
+    - build_industry_sector_ratios
+    - modify_existing_heating
+
+remote:
+  ssh: "zecm"
+  path: "/home/users/c/cpschau/scratch/pypsa-sysgf"
+
+foresight: myopic
+
+scenario:
+  ll:
+  - vopt
+  clusters:
+  - 27
+  opts:
+  - ''
+  sector_opts:
+  - none
+  planning_horizons:
+  - 2045
+
+# Per-scenario overrides drive the fixing chain; these are the shared knobs.
+fix_foreign_investments:
+  enable: false
+  reference_scenario: NoPTES_T109
+  nom_min: true
+  nom_max: true
+  lines_only: false
+  unfix_virtual_components: true
+  slack: 0
+
+clustering:
+  temporal:
+    # Daily resolution keeps seasonal PTES dynamics and boosting hours
+    # resolved; raise (e.g. 73H) to trade fidelity for runtime.
+    resolution_sector: 24H
+
+co2_budget:
+  2045: 0.00
+
+sector:
+  heat_sources:
+    urban central:
+    - air
+    - ptes
+    - geothermal
+  district_heating:
+    potential:
+      DE: 0.4
+      default: 0.4
+    ignore_missing_geothermal_data: true
+    # Fixed typical heat-pump cooling (no Picard iteration).
+    heat_pump_cooling_iterative: false
+    supply_temperature_approximation:
+      # The configured baseyear temperatures ARE the study temperatures:
+      # disable the annual reduction so each scenario's network temperature
+      # level is exactly what its name says, also in 2045.
+      relative_annual_temperature_reduction: 0.0
