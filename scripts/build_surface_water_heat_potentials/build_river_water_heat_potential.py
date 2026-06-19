@@ -60,8 +60,6 @@ from approximators.river_water_heat_approximator import RiverWaterHeatApproximat
 
 logger = logging.getLogger(__name__)
 
-MEMORY_SAFETY_FACTOR = 0.7  # Use 70% of available memory for Dask arrays
-
 
 def load_hera_data(
     hera_inputs: dict,
@@ -112,18 +110,15 @@ def load_hera_data(
         chunks={"time": -1, "lat": 14, "lon": 4530},
         concat_dim="time",
         combine="nested",
-    )["dis"]
-
-    # Select time range that covers our snapshots (using native HERA resolution)
-    river_discharge = river_discharge.sel(time=slice(start_time, end_time))
+    )["dis"].sel(time=slice(start_time, end_time))
 
     # Process river discharge data
     river_discharge = (
         river_discharge.rename({"lat": "latitude", "lon": "longitude"})
         .rio.write_crs("EPSG:4326")
         .rio.clip_box(minx, miny, maxx, maxy)
-        .rio.reproject("EPSG:3035")
     )
+    # river_discharge = river_discharge.rio.reproject("EPSG:3035")
     result["river_discharge"] = river_discharge
 
     # Load and concatenate ambient temperature files using open_mfdataset
@@ -132,18 +127,15 @@ def load_hera_data(
         chunks={"time": -1, "lat": 990, "lon": 1510},
         concat_dim="time",
         combine="nested",
-    )["ta6"]
-
-    # Select time range that covers our snapshots (using native HERA resolution)
-    ambient_temperature = ambient_temperature.sel(time=slice(start_time, end_time))
+    )["ta6"].sel(time=slice(start_time, end_time))
 
     # Process ambient temperature data
     ambient_temperature = (
         ambient_temperature.rename({"lat": "latitude", "lon": "longitude"})
         .rio.write_crs("EPSG:4326")
         .rio.clip_box(minx, miny, maxx, maxy)
-        .rio.reproject("EPSG:3035")
     )
+    # ambient_temperature = ambient_temperature.rio.reproject("EPSG:3035")
     result["ambient_temperature"] = ambient_temperature
 
     return result
@@ -290,8 +282,8 @@ def get_regional_result(
     river_discharge = hera_data["river_discharge"]
     ambient_temperature = hera_data["ambient_temperature"]
 
-    # Reproject region to match data CRS for spatial calculations
-    region = region.to_crs("EPSG:3035")
+    # Keep region in data CRS (EPSG:4326) so the polygon clip matches the raster
+    region = region.to_crs("EPSG:4326")
 
     river_water_heat_approximator = RiverWaterHeatApproximator(
         volume_flow=river_discharge,  # River discharge (volume flow)
@@ -316,10 +308,7 @@ def get_regional_result(
 
     # Compute results immediately to free Dask arrays and enable garbage collection
     spatial_aggregate = spatial_aggregate.compute()
-
-    # Explicitly delete approximator and intermediate arrays
-    del river_water_heat_approximator
-    del river_discharge, ambient_temperature
+    del river_water_heat_approximator, river_discharge, ambient_temperature, hera_data
     gc.collect()
 
     result = {
@@ -333,25 +322,6 @@ def get_regional_result(
         del temporal_aggregate
 
     return result
-
-
-def set_dask_chunk_size(
-    n_threads: int,  # Number of threads per worker,
-    memory_mb: int,  # Memory per worker in MB
-    memory_safety_factor=MEMORY_SAFETY_FACTOR,
-    n_datasets: int = 2,  # ambient temperature and river discharge datasets
-    operation_multiplier: int = 3,  # Multiplier for operation overhead
-) -> None:
-    """
-    Set the Dask chunk size based on available memory and number of threads.
-    This function calculates the chunk size for Dask arrays to optimize memory usage
-    """
-
-    chunk_size = (
-        memory_mb * memory_safety_factor / n_threads / n_datasets / operation_multiplier
-    )
-    dask.config.set({"array.chunk-size": f"{chunk_size}MB"})
-
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
@@ -390,13 +360,19 @@ if __name__ == "__main__":
     dask.config.set(scheduler="threads")  # Use threaded scheduler
     dask.config.set(num_workers=snakemake.threads)  # Use specified number of threads
 
-    set_dask_chunk_size(
-        n_threads=snakemake.threads, memory_mb=snakemake.resources.mem_mb
-    )
-
     # Process regions sequentially but with multi-threaded Dask operations
+    import os
+    import time
+
+    import psutil  # DEBUG: temporary memory/runtime probe, remove later
+
+    _proc = psutil.Process(os.getpid())  # DEBUG
+    _t0 = time.perf_counter()  # DEBUG
+
     results = []
     for i, region_name in enumerate(regions_onshore.index, 1):
+        logger.info("Processing region %d/%d: %s", i, len(regions_onshore.index), region_name)
+        _t_region = time.perf_counter()  # DEBUG
         # Extract region geometry and create a copy to avoid modification conflicts
         region = gpd.GeoSeries(regions_onshore.loc[region_name].copy(deep=True))
 
@@ -411,8 +387,17 @@ if __name__ == "__main__":
         results.append(result)
 
         # Explicit cleanup to free memory between regions
-        del result, region
-        gc.collect()
+
+        # DEBUG: temporary memory/runtime probe, remove later
+        logger.info(
+            "[probe] region %d/%d (%s): %.1fs region, %.1fs total, RSS %.0f MB",
+            i,
+            len(regions_onshore.index),
+            region_name,
+            time.perf_counter() - _t_region,
+            time.perf_counter() - _t0,
+            _proc.memory_info().rss / 1e6,
+        )
 
     # Build DataFrame of total power for each region
     # Regions as columns and time as rows

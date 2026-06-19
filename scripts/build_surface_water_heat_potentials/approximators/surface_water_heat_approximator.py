@@ -86,7 +86,7 @@ class SurfaceWaterHeatApproximator(ABC):
         # Calculate power-weighted average temperature using cached sum
         average_water_temperature = (
             self._water_temperature_in_region * self._power_in_region
-        ).sum(dim=["x", "y"]) / (self._power_sum_spatial + 0.001)
+        ).sum(dim=["longitude", "latitude"]) / (self._power_sum_spatial + 0.001)
 
         # Combine into a single dataset
         return xr.Dataset(
@@ -196,7 +196,7 @@ class SurfaceWaterHeatApproximator(ABC):
         xr.DataArray
             Volume flow data clipped to region
         """
-        return self.volume_flow.rio.clip(self.region.geometry, drop=False)
+        return self.volume_flow.rio.clip(self.region.geometry, drop=True)
 
     @cached_property
     def _water_temperature_in_region(self) -> xr.DataArray:
@@ -208,19 +208,23 @@ class SurfaceWaterHeatApproximator(ABC):
         xr.DataArray
             Water temperature data clipped to region
         """
-        return self.water_temperature.rio.clip(self.region.geometry, drop=False)
+        return self.water_temperature.rio.clip(self.region.geometry, drop=True)
 
     @cached_property
     def _data_resolution(self) -> float:
         """
         Cache resolution calculation based on dataset resolution.
-        Assumes data is in EPSG:3035 (meters).
+
+        Data is in EPSG:4326, so rio.resolution() returns degrees. We convert to
+        meters using a rough arc-minute factor (1 arcmin ~ 1852 m, 1 deg = 60 arcmin),
+        without any geometry considerations (no cos(latitude) correction).
         """
-        # Get resolution directly from rio
+        # Get resolution directly from rio (in degrees)
         x_res, y_res = self.water_temperature.rio.resolution()
 
-        # Average resolution in meters (EPSG:3035 uses meters)
-        return (abs(x_res) + abs(y_res)) / 2
+        # Average resolution in degrees, converted to meters
+        meters_per_degree = 60 * 1852
+        return (abs(x_res) + abs(y_res)) / 2 * meters_per_degree
 
     @cached_property
     def _scaling_factor(self) -> float:
@@ -264,7 +268,7 @@ class SurfaceWaterHeatApproximator(ABC):
         xr.DataArray
             Spatial sum of power over x and y dimensions
         """
-        return self._power_in_region.sum(dim=["x", "y"])
+        return self._power_in_region.sum(dim=["longitude", "latitude"])
 
     @cached_property
     def _power_sum_temporal(self) -> xr.DataArray:

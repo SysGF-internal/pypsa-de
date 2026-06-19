@@ -68,13 +68,14 @@ class RiverWaterHeatApproximator(SurfaceWaterHeatApproximator):
         xr.DataArray
             HERA dataset with rounded coordinates.
         """
-        if "x" in da.coords and "y" in da.coords:
+        if "longitude" in da.coords and "latitude" in da.coords:
             return da.assign_coords(
-                x=da.x.round(decimal_precision), y=da.y.round(decimal_precision)
+                longitude=da.longitude.round(decimal_precision),
+                latitude=da.latitude.round(decimal_precision),
             )
         else:
             raise ValueError(
-                "The DataArray does not contain the expected coordinates 'x' and 'y'."
+                "The DataArray does not contain the expected coordinates 'longitude' and 'latitude'."
             )
 
     @staticmethod
