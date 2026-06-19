@@ -213,18 +213,41 @@ class SurfaceWaterHeatApproximator(ABC):
     @cached_property
     def _data_resolution(self) -> float:
         """
-        Cache resolution calculation based on dataset resolution.
+        Effective linear pixel resolution of the data grid, in meters.
 
-        Data is in EPSG:4326, so rio.resolution() returns degrees. We convert to
-        meters using a rough arc-minute factor (1 arcmin ~ 1852 m, 1 deg = 60 arcmin),
-        without any geometry considerations (no cos(latitude) correction).
+        The data is on a geographic (EPSG:4326) grid, so ``rio.resolution()``
+        returns the pixel spacing in degrees. The grid is angularly square
+        (equal degree spacing in longitude and latitude) but anisotropic on the
+        ground: a degree of longitude spans ``cos(latitude)`` times the ground
+        distance of a degree of latitude. Each axis is therefore converted to
+        meters separately, foreshortening longitude by ``cos(latitude)`` and
+        leaving latitude unscaled. The latitude used is the grid's mean latitude,
+        which is effectively constant over a single region.
+
+        The two axis resolutions are collapsed into one scalar via their
+        geometric mean, i.e. the side length of a square pixel with the same
+        ground area as the anisotropic pixel. This value feeds ``_scaling_factor``
+        (``_data_resolution / min_distance_meters``), which thins the per-pixel
+        power sum so that heat extraction is not double-counted within
+        ``min_distance_meters`` along a river.
+
+        Returns
+        -------
+        float
+            Isotropic-equivalent pixel resolution in meters.
         """
-        # Get resolution directly from rio (in degrees)
-        x_res, y_res = self.water_temperature.rio.resolution()
+        x_res_deg, y_res_deg = self.water_temperature.rio.resolution()
 
-        # Average resolution in degrees, converted to meters
+        # Region-representative latitude; ~constant within one region.
+        lat = float(self.water_temperature.latitude.mean())
+
+        # Rough degrees->meters (1 arcmin ~ 1852 m, 1 deg = 60 arcmin).
         meters_per_degree = 60 * 1852
-        return (abs(x_res) + abs(y_res)) / 2 * meters_per_degree
+        dx = abs(x_res_deg) * meters_per_degree * np.cos(np.radians(lat))
+        dy = abs(y_res_deg) * meters_per_degree
+
+        # Geometric mean = area-preserving isotropic-equivalent resolution.
+        return float(np.sqrt(dx * dy))
 
     @cached_property
     def _scaling_factor(self) -> float:

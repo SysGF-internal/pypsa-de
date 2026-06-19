@@ -53,7 +53,7 @@ class RiverWaterHeatApproximator(SurfaceWaterHeatApproximator):
 
     @staticmethod
     def _round_coordinates(
-        da: xr.DataArray, decimal_precision: int = 4
+        da: xr.DataArray, decimal_precision: int = 8
     ) -> xr.DataArray:
         """
         Round the coordinates of the HERA dataset to the defined precision.
