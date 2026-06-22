@@ -26,7 +26,7 @@ class SurfaceWaterHeatApproximator(ABC):
     """
 
     TIME = "time"
-    EPSG = 3035
+    EPSG = 4326
 
     def __init__(
         self,
@@ -169,8 +169,8 @@ class SurfaceWaterHeatApproximator(ABC):
                 f"volume_flow has {self.volume_flow.dims}"
             )
 
-        # Check that x and y coordinates match
-        for coord in ["x", "y", self.TIME]:
+        # Check that longitude and latitude coordinates match
+        for coord in ["longitude", "latitude", self.TIME]:
             if (
                 coord in self.water_temperature.coords
                 and coord in self.volume_flow.coords
@@ -211,48 +211,65 @@ class SurfaceWaterHeatApproximator(ABC):
         return self.water_temperature.rio.clip(self.region.geometry, drop=True)
 
     @cached_property
-    def _data_resolution(self) -> float:
+    def _data_resolution_degrees(self) -> float:
+        """
+        Average pixel spacing of the data grid, in degrees.
+
+        The data is on a geographic (EPSG:4326) grid, so ``rio.resolution()``
+        returns the pixel spacing in degrees. The grid is angularly square (equal
+        degree spacing in longitude and latitude); the two axis values are averaged
+        for robustness. Use this where a length in the data's own CRS is needed,
+        e.g. buffering geometries that are themselves in EPSG:4326.
+
+        Returns
+        -------
+        float
+            Average pixel spacing in degrees.
+        """
+        x_res_deg, y_res_deg = self.water_temperature.rio.resolution()
+        return (abs(x_res_deg) + abs(y_res_deg)) / 2
+
+    @cached_property
+    def _data_resolution_meters(self) -> float:
         """
         Effective linear pixel resolution of the data grid, in meters.
 
-        The data is on a geographic (EPSG:4326) grid, so ``rio.resolution()``
-        returns the pixel spacing in degrees. The grid is angularly square
-        (equal degree spacing in longitude and latitude) but anisotropic on the
-        ground: a degree of longitude spans ``cos(latitude)`` times the ground
-        distance of a degree of latitude. Each axis is therefore converted to
-        meters separately, foreshortening longitude by ``cos(latitude)`` and
-        leaving latitude unscaled. The latitude used is the grid's mean latitude,
-        which is effectively constant over a single region.
+        The grid is angularly square but anisotropic on the ground: a degree of
+        longitude spans ``cos(latitude)`` times the ground distance of a degree of
+        latitude. Converting each axis separately (longitude foreshortened by
+        ``cos(latitude)``, latitude unscaled) and taking the geometric mean — the
+        side length of a square pixel with the same ground area — reduces, for a
+        square angular grid, to ``_data_resolution_degrees * meters_per_degree *
+        sqrt(cos(latitude))``. The latitude used is the grid's mean latitude
+        (effectively constant over a single region).
 
-        The two axis resolutions are collapsed into one scalar via their
-        geometric mean, i.e. the side length of a square pixel with the same
-        ground area as the anisotropic pixel. This value feeds ``_scaling_factor``
-        (``_data_resolution / min_distance_meters``), which thins the per-pixel
-        power sum so that heat extraction is not double-counted within
-        ``min_distance_meters`` along a river.
+        This value feeds ``_scaling_factor`` (``_data_resolution_meters /
+        min_distance_meters``), which thins the per-pixel power sum so that heat
+        extraction is not double-counted within ``min_distance_meters`` along a
+        river.
 
         Returns
         -------
         float
             Isotropic-equivalent pixel resolution in meters.
         """
-        x_res_deg, y_res_deg = self.water_temperature.rio.resolution()
-
         # Region-representative latitude; ~constant within one region.
         lat = float(self.water_temperature.latitude.mean())
 
         # Rough degrees->meters (1 arcmin ~ 1852 m, 1 deg = 60 arcmin).
         meters_per_degree = 60 * 1852
-        dx = abs(x_res_deg) * meters_per_degree * np.cos(np.radians(lat))
-        dy = abs(y_res_deg) * meters_per_degree
 
-        # Geometric mean = area-preserving isotropic-equivalent resolution.
-        return float(np.sqrt(dx * dy))
+        # Geometric mean of the anisotropic ground pixel, for a square angular grid.
+        return (
+            self._data_resolution_degrees
+            * meters_per_degree
+            * float(np.sqrt(np.cos(np.radians(lat))))
+        )
 
     @cached_property
     def _scaling_factor(self) -> float:
         """Cache scaling factor calculation."""
-        return self._data_resolution / self.min_distance_meters
+        return self._data_resolution_meters / self.min_distance_meters
 
     @cached_property
     def _power_in_region(self) -> xr.DataArray:

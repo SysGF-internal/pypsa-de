@@ -70,8 +70,6 @@ warnings.filterwarnings(
 
 logger = logging.getLogger(__name__)
 
-MEMORY_SAFETY_FACTOR = 0.7  # Use 70% of available memory for Dask arrays
-
 
 def load_hera_data(
     hera_inputs: dict,
@@ -97,7 +95,7 @@ def load_hera_data(
     Returns
     -------
     xr.DataArray
-        Ambient temperature data reprojected to EPSG:3035.
+        Ambient temperature data in native EPSG:4326.
     """
     temp_files = [
         v for k, v in hera_inputs.items() if k.startswith("hera_ambient_temperature_")
@@ -121,12 +119,11 @@ def load_hera_data(
     # Select time range that covers our snapshots (using native HERA resolution)
     ambient_temperature = ambient_temperature.sel(time=slice(start_time, end_time))
 
-    # Process ambient temperature data
+    # Process ambient temperature data (kept in native EPSG:4326)
     return (
         ambient_temperature.rename({"lat": "latitude", "lon": "longitude"})
         .rio.write_crs("EPSG:4326")
         .rio.clip_box(minx, miny, maxx, maxy)
-        .rio.reproject("EPSG:3035")
     )
 
 
@@ -248,8 +245,9 @@ def get_regional_result(
     minx, miny, maxx, maxy = region.total_bounds
     ambient_temperature = load_hera_data(hera_inputs, snapshots, minx, miny, maxx, maxy)
 
-    region = region.to_crs("EPSG:3035")
-    lake_shapes = lake_shapes.to_crs("EPSG:3035")
+    # Keep region and lakes in data CRS (EPSG:4326) so the clips match the raster
+    region = region.to_crs("EPSG:4326")
+    lake_shapes = lake_shapes.to_crs("EPSG:4326")
 
     lake_water_heat_approximator = LakeWaterHeatApproximator(
         ambient_temperature=ambient_temperature,
@@ -260,10 +258,9 @@ def get_regional_result(
     spatial_aggregate = lake_water_heat_approximator.get_spatial_aggregate()
 
     if enable_heat_source_maps:
+        # Data is already in EPSG:4326; keep as-is for output.
         temporal_aggregate = (
-            lake_water_heat_approximator.get_temporal_aggregate()
-            .rio.reproject("EPSG:4326")
-            .compute()
+            lake_water_heat_approximator.get_temporal_aggregate().compute()
         )
     else:
         temporal_aggregate = None
@@ -279,35 +276,6 @@ def get_regional_result(
         result["temporal aggregate"] = temporal_aggregate
 
     return result
-
-
-def set_dask_chunk_size(
-    n_threads: int,
-    memory_mb: int,
-    memory_safety_factor: float = MEMORY_SAFETY_FACTOR,
-    n_datasets: int = 1,
-    operation_multiplier: int = 3,
-) -> None:
-    """
-    Configure Dask chunk size based on available memory.
-
-    Parameters
-    ----------
-    n_threads : int
-        Number of threads per worker.
-    memory_mb : int
-        Memory per worker in MB.
-    memory_safety_factor : float, optional
-        Fraction of memory to use, by default 0.7.
-    n_datasets : int, optional
-        Number of concurrent datasets in memory, by default 1.
-    operation_multiplier : int, optional
-        Multiplier for operation overhead, by default 3.
-    """
-    chunk_size = (
-        memory_mb * memory_safety_factor / n_threads / n_datasets / operation_multiplier
-    )
-    dask.config.set({"array.chunk-size": f"{chunk_size}MB"})
 
 
 if __name__ == "__main__":
@@ -348,10 +316,6 @@ if __name__ == "__main__":
     # Configure Dask for multi-threading within operations (no distributed cluster)
     dask.config.set(scheduler="threads")  # Use threaded scheduler
     dask.config.set(num_workers=snakemake.threads)  # Use specified number of threads
-
-    set_dask_chunk_size(
-        n_threads=snakemake.threads, memory_mb=snakemake.resources.mem_mb
-    )
 
     # Process regions sequentially but with multi-threaded Dask operations
     results = []

@@ -118,7 +118,6 @@ def load_hera_data(
         .rio.write_crs("EPSG:4326")
         .rio.clip_box(minx, miny, maxx, maxy)
     )
-    # river_discharge = river_discharge.rio.reproject("EPSG:3035")
     result["river_discharge"] = river_discharge
 
     # Load and concatenate ambient temperature files using open_mfdataset
@@ -135,7 +134,6 @@ def load_hera_data(
         .rio.write_crs("EPSG:4326")
         .rio.clip_box(minx, miny, maxx, maxy)
     )
-    # ambient_temperature = ambient_temperature.rio.reproject("EPSG:3035")
     result["ambient_temperature"] = ambient_temperature
 
     return result
@@ -273,9 +271,8 @@ def get_regional_result(
 
     # Data processing strategy:
     # 1. Load HERA discharge and temperature data
-    # 2. Clip to region bounds for efficiency
-    # 3. Reproject to EPSG:3035 for accurate spatial calculations
-    # 4. Feed to approximator for heat potential calculation
+    # 2. Clip to region bounds for efficiency (kept in native EPSG:4326)
+    # 3. Feed to approximator for heat potential calculation
 
     # Load and concatenate HERA data for all required years with preprocessing
     hera_data = load_hera_data(hera_inputs, snapshots, minx, miny, maxx, maxy)
@@ -297,12 +294,10 @@ def get_regional_result(
 
     # Calculate temporal aggregate only if needed (spatial distribution data for plotting, no time dimension)
     if enable_heat_source_maps:
+        # Data is already in EPSG:4326 (longitude/latitude); keep as-is for output.
         temporal_aggregate = (
-            river_water_heat_approximator.get_temporal_aggregate()
-            .rio.reproject("EPSG:4326")  # Convert back to WGS84 for output consistency
-            .rename({"x": "longitude", "y": "latitude"})  # Standardize coordinate names
+            river_water_heat_approximator.get_temporal_aggregate().compute()
         )
-        temporal_aggregate = temporal_aggregate.compute()
     else:
         temporal_aggregate = None
 
@@ -361,18 +356,11 @@ if __name__ == "__main__":
     dask.config.set(num_workers=snakemake.threads)  # Use specified number of threads
 
     # Process regions sequentially but with multi-threaded Dask operations
-    import os
-    import time
-
-    import psutil  # DEBUG: temporary memory/runtime probe, remove later
-
-    _proc = psutil.Process(os.getpid())  # DEBUG
-    _t0 = time.perf_counter()  # DEBUG
-
     results = []
     for i, region_name in enumerate(regions_onshore.index, 1):
-        logger.info("Processing region %d/%d: %s", i, len(regions_onshore.index), region_name)
-        _t_region = time.perf_counter()  # DEBUG
+        logger.info(
+            "Processing region %d/%d: %s", i, len(regions_onshore.index), region_name
+        )
         # Extract region geometry and create a copy to avoid modification conflicts
         region = gpd.GeoSeries(regions_onshore.loc[region_name].copy(deep=True))
 
@@ -385,19 +373,6 @@ if __name__ == "__main__":
             enable_heat_source_maps=snakemake.params.enable_heat_source_maps,
         )
         results.append(result)
-
-        # Explicit cleanup to free memory between regions
-
-        # DEBUG: temporary memory/runtime probe, remove later
-        logger.info(
-            "[probe] region %d/%d (%s): %.1fs region, %.1fs total, RSS %.0f MB",
-            i,
-            len(regions_onshore.index),
-            region_name,
-            time.perf_counter() - _t_region,
-            time.perf_counter() - _t0,
-            _proc.memory_info().rss / 1e6,
-        )
 
     # Build DataFrame of total power for each region
     # Regions as columns and time as rows

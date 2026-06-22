@@ -100,8 +100,8 @@ class LakeWaterHeatApproximator(SurfaceWaterHeatApproximator):
         lake_shapes : gpd.GeoDataFrame
             Lake polygons from HydroLAKES.
         tolerance : float, optional
-            Simplification tolerance in CRS units (~100m for EPSG:3035),
-            by default 0.001.
+            Simplification tolerance in CRS units (~100 m at mid-latitudes for
+            EPSG:4326, where 0.001 deg ~ 111 m), by default 0.001.
 
         Returns
         -------
@@ -206,11 +206,11 @@ class LakeWaterHeatApproximator(SurfaceWaterHeatApproximator):
                 "No raster cells found within lake geometries. Returning NaN."
             )
             return xr.full_like(self.ambient_temperature.sel(
-                x=[self.region.centroid.x[0]], y=[self.region.centroid.y[0]], method="nearest"
+                longitude=[self.region.centroid.x[0]], latitude=[self.region.centroid.y[0]], method="nearest"
             ), fill_value=np.nan)
         else:
             return self.ambient_temperature.rio.clip(
-                eligible_lake_parts.geometry.buffer(self._data_resolution), # Buffer to ensure we capture nearby raster cells in case there is no raster cell center within the lake polygon
+                eligible_lake_parts.geometry.buffer(self._data_resolution_degrees), # Buffer to ensure we capture nearby raster cells in case there is no raster cell center within the lake polygon (geometry is in EPSG:4326, so buffer in degrees)
                 eligible_lake_parts.crs,
                 drop=True
             )
@@ -225,7 +225,7 @@ class LakeWaterHeatApproximator(SurfaceWaterHeatApproximator):
         Returns
         -------
         xr.DataArray
-            Water temperature raster with spatial (x, y) and time dimensions.
+            Water temperature raster with spatial (longitude, latitude) and time dimensions.
         """
         air_temperature_in_lakes = self._air_temperature_in_lakes(
             self._lake_parts_in_region
@@ -244,7 +244,7 @@ class LakeWaterHeatApproximator(SurfaceWaterHeatApproximator):
         xr.DataArray
             Mean water temperature over time (spatial dimensions averaged).
         """
-        return self._water_temperature_in_region_raster.mean(dim=("x", "y"))
+        return self._water_temperature_in_region_raster.mean(dim=("longitude", "latitude"))
 
     @cached_property
     def _power_sum_spatial(self) -> xr.DataArray:

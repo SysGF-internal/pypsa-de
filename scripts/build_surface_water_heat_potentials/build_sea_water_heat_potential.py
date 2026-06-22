@@ -172,7 +172,7 @@ def get_regional_result(
     # Get bounding box for efficient data clipping
     minx, miny, maxx, maxy = region.total_bounds
 
-    # Load and preprocess sea water temperature data
+    # Load and preprocess sea water temperature data (kept in native EPSG:4326)
     water_temperature = (
         xr.open_mfdataset(
             seawater_temperature_fn,
@@ -186,11 +186,10 @@ def get_regional_result(
         .mean(dim="depth")
         .rio.write_crs("EPSG:4326")
         .rio.clip_box(minx, miny, maxx, maxy)
-        .rio.reproject("EPSG:3035")
     )
 
-    # Reproject region to match data CRS for spatial calculations
-    region = region.to_crs("EPSG:3035")
+    # Keep region in data CRS (EPSG:4326) so the polygon clip matches the raster
+    region = region.to_crs("EPSG:4326")
 
     seawater_heat_approximator = SeaWaterHeatApproximator(
         water_temperature=water_temperature,
@@ -202,11 +201,8 @@ def get_regional_result(
     spatial_aggregate = seawater_heat_approximator.get_spatial_aggregate()
 
     # Calculate temporal aggregate (spatial distribution data for plotting, no time dimension)
-    temporal_aggregate = (
-        seawater_heat_approximator.get_temporal_aggregate()
-        .rio.reproject("EPSG:4326")  # Convert back to WGS84 for output consistency
-        .rename({"x": "longitude", "y": "latitude"})
-    )
+    # Data is already in EPSG:4326 (longitude/latitude); keep as-is for output.
+    temporal_aggregate = seawater_heat_approximator.get_temporal_aggregate()
 
     # Compute results immediately to free Dask arrays
     spatial_aggregate = spatial_aggregate.compute()
