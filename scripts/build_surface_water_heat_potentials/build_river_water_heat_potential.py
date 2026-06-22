@@ -50,7 +50,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-from _helpers import (
+from scripts._helpers import (
     configure_logging,
     get_snapshots,
     set_scenario_config,
