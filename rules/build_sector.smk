@@ -618,34 +618,6 @@ def input_heat_source_temperature(
     return file_names
 
 
-def input_ptes_bottom_temperature(w) -> dict[str, str]:
-    """
-    Generate conditional input for PTES bottom temperature profiles.
-
-    Only includes the input file if PTES is configured as a heat source
-    for urban central heating.
-
-    Parameters
-    ----------
-    w : snakemake.io.Wildcards
-        Snakemake wildcards object.
-
-    Returns
-    -------
-    dict[str, str]
-        Dictionary with "temp_ptes_bottom" key if PTES is a heat source,
-        empty dict otherwise.
-    """
-    heat_sources = config_provider("sector", "heat_sources", "urban central")(w)
-    if "ptes" in heat_sources:
-        return {
-            "temp_ptes_bottom": resources(
-                "temp_ptes_bottom_profiles_base_s_{clusters}_{planning_horizons}.nc"
-            )
-        }
-    return {}
-
-
 def input_seawater_temperature(w) -> dict[str, str]:
     """
     Generate input file paths for seawater temperature data.
@@ -762,9 +734,6 @@ rule build_ptes_operations:
             "bottom_temperature",
         ),
         snapshots=config_provider("snapshots"),
-        charge_boosting_required=config_provider(
-            "sector", "district_heating", "ptes", "charge_boosting_required"
-        ),
         discharge_resistive_boosting=config_provider(
             "sector", "district_heating", "ptes", "discharge_resistive_boosting"
         ),
@@ -794,9 +763,6 @@ rule build_ptes_operations:
     output:
         ptes_top_temperature_profiles=resources(
             "temp_ptes_top_profiles_base_s_{clusters}_{planning_horizons}.nc"
-        ),
-        ptes_bottom_temperature_profiles=resources(
-            "temp_ptes_bottom_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
         ptes_e_max_pu_profiles=resources(
             "ptes_e_max_pu_profiles_base_s_{clusters}_{planning_horizons}.nc"
@@ -829,7 +795,6 @@ rule build_heat_source_utilisation_profiles:
         ptes_enable=config_provider("sector", "district_heating", "ptes", "enable"),
     input:
         unpack(input_heat_source_temperature),
-        unpack(input_ptes_bottom_temperature),
         central_heating_forward_temperature_profiles=resources(
             "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
@@ -1671,9 +1636,13 @@ rule build_district_heating_subnode_demands:
     resources:
         mem_mb=4000,
     log:
-        logs("build_district_heating_subnode_demands_{clusters}_{planning_horizons}.log"),
+        logs(
+            "build_district_heating_subnode_demands_{clusters}_{planning_horizons}.log"
+        ),
     benchmark:
-        benchmarks("build_district_heating_subnode_demands/s_{clusters}_{planning_horizons}")
+        benchmarks(
+            "build_district_heating_subnode_demands/s_{clusters}_{planning_horizons}"
+        )
     script:
         "../scripts/build_district_heating_subnode_demands.py"
 
