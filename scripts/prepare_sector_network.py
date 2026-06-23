@@ -3162,7 +3162,9 @@ def add_heat(
                 # Load pre-calculated e_max_pu profiles
                 e_max_pu_data = xr.open_dataarray(ptes_e_max_pu_file)
                 e_max_pu = (
-                    e_max_pu_data.sel(name=heat_nodes).to_pandas().reindex(index=n.snapshots)
+                    e_max_pu_data.sel(name=heat_nodes)
+                    .to_pandas()
+                    .reindex(index=n.snapshots)
                 )
             else:
                 e_max_pu = 1
@@ -3247,15 +3249,19 @@ def add_heat(
             costs_name_heat_pump = heat_system.heat_pump_costs_name(heat_source)
 
             cop_heat_pump = (
-                cop.sel(
-                    heat_system=heat_system.system_type.value,
-                    heat_source=heat_source.value,
-                    name=heat_nodes,
+                (
+                    cop.sel(
+                        heat_system=heat_system.system_type.value,
+                        heat_source=heat_source.value,
+                        name=heat_nodes,
+                    )
+                    .transpose("time", "name")
+                    .to_pandas()
+                    if options["time_dep_hp_cop"]
+                    else costs.loc[[costs_name_heat_pump], ["efficiency"]]
                 )
-                .transpose("time", "name")
-                .to_pandas()
-                if options["time_dep_hp_cop"]
-                else costs.loc[[costs_name_heat_pump], ["efficiency"]]
+                .clip(lower=0.001)
+                .squeeze()
             )
 
             heat_carrier = heat_source.heat_carrier(heat_system)
@@ -3391,7 +3397,7 @@ def add_heat(
                     bus1=parent_of_subnode.values,
                     bus2=heat_source.get_heat_pump_input_bus(heat_nodes, heat_system),
                     carrier=f"{heat_system} {heat_source} heat pump",
-                    efficiency=1 / cop_heat_pump.clip(lower=0.001).squeeze(),
+                    efficiency=1 / cop_heat_pump,
                     efficiency2=heat_source.get_heat_pump_efficiency2(cop_heat_pump),
                     capital_cost=costs.at[costs_name_heat_pump, "capital_cost"]
                     * overdim_factor,

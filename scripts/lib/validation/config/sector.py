@@ -67,10 +67,6 @@ class _PtesConfig(BaseModel):
         "`e_nom_pu=(top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature)`. "
         "See `build_ptes_operations`.",
     )
-    charge_boosting_required: bool = Field(
-        False,
-        description="Deprecated. Not implemented.",
-    )
     discharge_resistive_boosting: bool = Field(
         False,
         description="If True, enables boosting by resistive heaters instead of heat pumps. "
@@ -1128,6 +1124,28 @@ class SectorConfig(BaseModel):
                     f"'{source.value}' is in heat_sources.urban central but "
                     f"'{option_key}' is 0 or unset. Either set it to a value "
                     f"in (0, 1] or remove '{source.value}' from heat_sources."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def validate_ptes_in_heat_sources(self):
+        """
+        Ensure ``ptes`` is listed in ``heat_sources.urban central`` when
+        ``district_heating.ptes.enable`` is true.
+
+        ``prepare_sector_network.add_heat`` only creates the PTES buses and the
+        discharge links to ``urban central heat`` when PTES appears in the heat
+        sources, so enabling PTES without listing it would silently drop it.
+        """
+        if self.district_heating.ptes.enable:
+            urban_central_sources = self.heat_sources.get(
+                HeatSystemType.URBAN_CENTRAL, []
+            )
+            if HeatSource.PTES not in urban_central_sources:
+                raise ValueError(
+                    "district_heating.ptes.enable is true but 'ptes' is not in "
+                    "heat_sources.urban central. Add 'ptes' to heat_sources.urban "
+                    "central or disable PTES."
                 )
         return self
 

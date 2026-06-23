@@ -792,7 +792,6 @@ rule build_heat_source_utilisation_profiles:
         heat_source_temperatures=config_provider(
             "sector", "district_heating", "heat_source_temperatures"
         ),
-        ptes_enable=config_provider("sector", "district_heating", "ptes", "enable"),
     input:
         unpack(input_heat_source_temperature),
         central_heating_forward_temperature_profiles=resources(
