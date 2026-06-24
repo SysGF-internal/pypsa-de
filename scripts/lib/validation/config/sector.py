@@ -182,14 +182,8 @@ class _DistrictHeatingConfig(ConfigModel):
     ates: dict[str, Any] = Field(
         default_factory=lambda: {
             "enable": False,
-            "suitable_aquifer_types": ["Highly productive porous aquifers"],
-            "aquifer_volumetric_heat_capacity": 2600,
-            "fraction_of_aquifer_area_available": 0.2,
-            "effective_screen_length": 20,
-            "capex_as_fraction_of_geothermal_heat_source": 0.75,
-            "recovery_factor": 0.6,
+            "lifetime": 20,
             "marginal_cost_charger": 0.035,
-            "ignore_missing_regions": False,
         },
         description="Aquifer thermal energy storage settings.",
     )
@@ -222,6 +216,7 @@ class _DistrictHeatingConfig(ConfigModel):
     heat_source_temperatures: dict[str, float] = Field(
         default_factory=lambda: {
             "geothermal": 65,
+            "ates": 90,
             "electrolysis_waste": 70,
             "fuel_cell_waste": 70,
             "fischer_tropsch_waste": 200,
@@ -1146,6 +1141,29 @@ class SectorConfig(BaseModel):
                     "district_heating.ptes.enable is true but 'ptes' is not in "
                     "heat_sources.urban central. Add 'ptes' to heat_sources.urban "
                     "central or disable PTES."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def validate_ates_in_heat_sources(self):
+        """
+        Ensure ``ates`` is listed in ``heat_sources.urban central`` when
+        ``district_heating.ates.enable`` is true.
+
+        ``prepare_sector_network.add_heat`` builds the ATES discharge / boosting
+        links (heat pump from the ``ates heat`` resource bus to district heat)
+        only when ATES appears in the heat sources, so enabling ATES without
+        listing it would silently drop the discharge path.
+        """
+        if self.district_heating.ates.get("enable", False):
+            urban_central_sources = self.heat_sources.get(
+                HeatSystemType.URBAN_CENTRAL, []
+            )
+            if HeatSource.ATES not in urban_central_sources:
+                raise ValueError(
+                    "district_heating.ates.enable is true but 'ates' is not in "
+                    "heat_sources.urban central. Add 'ates' to heat_sources.urban "
+                    "central or disable ATES."
                 )
         return self
 

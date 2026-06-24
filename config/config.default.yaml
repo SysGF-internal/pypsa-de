@@ -667,15 +667,8 @@ sector:
       design_bottom_temperature: 35
     ates:
       enable: false
-      suitable_aquifer_types:
-      - Highly productive porous aquifers
-      aquifer_volumetric_heat_capacity: 2600
-      fraction_of_aquifer_area_available: 0.2
-      effective_screen_length: 20
-      capex_as_fraction_of_geothermal_heat_source: 0.75
-      recovery_factor: 0.6
+      lifetime: 20
       marginal_cost_charger: 0.035
-      ignore_missing_regions: false
     heat_source_cooling: 6
     heat_pump_cop_approximation:
       refrigerant: ammonia
@@ -694,6 +687,7 @@ sector:
       label_column: Label
     heat_source_temperatures:
       geothermal: 65
+      ates: 90
       electrolysis_waste: 70
       fuel_cell_waste: 70
       fischer_tropsch_waste: 200

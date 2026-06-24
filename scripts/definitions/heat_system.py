@@ -231,6 +231,7 @@ class HeatSystem(Enum):
         # Check if this is an excess-heat-sourced heat pump
         if heat_source in [
             HeatSource.PTES,
+            HeatSource.ATES,
             HeatSource.GEOTHERMAL,
             HeatSource.SEA_WATER,
             HeatSource.RIVER_WATER,

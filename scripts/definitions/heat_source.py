@@ -66,6 +66,9 @@ class HeatSource(Enum):
         Ground/soil heat source (inexhaustible).
     PTES : str
         Pit Thermal Energy Storage discharge as heat source.
+    ATES : str
+        Aquifer Thermal Energy Storage discharge as heat source, modelled at a
+        constant top temperature and boosted to forward temperature by heat pumps.
 
     See Also
     --------
@@ -81,6 +84,7 @@ class HeatSource(Enum):
     AIR = "air"
     GROUND = "ground"
     PTES = "ptes"
+    ATES = "ates"
     # PTX excess heat sources
     ELECTROLYSIS_WASTE = "electrolysis_waste"
     FISCHER_TROPSCH_WASTE = "fischer_tropsch_waste"
@@ -118,7 +122,7 @@ class HeatSource(Enum):
             HeatSource.LAKE_WATER,
         ]:
             return HeatSourceType.SUPPLY_LIMITED
-        elif self == HeatSource.PTES:
+        elif self in [HeatSource.PTES, HeatSource.ATES]:
             return HeatSourceType.STORAGE
         else:
             return HeatSourceType.PROCESS_WASTE
@@ -139,6 +143,10 @@ class HeatSource(Enum):
         """
         if self in [HeatSource.RIVER_WATER, HeatSource.LAKE_WATER]:
             return False
+        # ATES is modelled at a constant top temperature from config, so its
+        # temperature comes from heat_source_temperatures rather than a file.
+        if self == HeatSource.ATES:
+            return True
         return self.source_type in [
             HeatSourceType.SUPPLY_LIMITED,
             HeatSourceType.PROCESS_WASTE,
