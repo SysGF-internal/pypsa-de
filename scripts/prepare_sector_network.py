@@ -3187,9 +3187,13 @@ def add_heat(
             ates_data = pd.read_csv(ates_potentials_file, index_col=0).reindex(
                 heat_nodes
             )
-            ates_feasible = ates_data["feasible"].fillna(False).to_numpy(dtype=bool)
+            ates_feasible = ates_data["feasible"].fillna(False).astype(bool)
             # Infeasible regions (no ATES data) get e_nom_max=0.
-            ates_e_nom_max = np.where(ates_feasible, np.inf, 0.0)
+            ates_e_nom_max = pd.Series(
+                np.where(ates_feasible, np.inf, 0.0), index=heat_nodes
+            )
+            ates_capital_cost = ates_data["capital_cost"].fillna(0.0)
+            ates_standing_loss = ates_data["hourly_standing_losses"].fillna(0.0)
 
             n.add("Carrier", f"{heat_system} aquifer thermal energy storage")
 
@@ -3207,7 +3211,8 @@ def add_heat(
             # equal in solve_network (add_TES_charger_ratio_constraints).
             n.add(
                 "Link",
-                heat_nodes + f" {heat_system} aquifer thermal energy storage charger",
+                heat_nodes,
+                suffix=f" {heat_system} aquifer thermal energy storage charger",
                 bus0=heat_nodes + f" {heat_system} heat",
                 bus1=heat_nodes + f" {heat_system} aquifer thermal energy storage",
                 efficiency=1.0,
@@ -3215,7 +3220,7 @@ def add_heat(
                 p_nom_extendable=True,
                 lifetime=ates_lifetime,
                 marginal_cost=ates_marginal_cost_charger,
-                capital_cost=ates_data["capital_cost"].to_numpy(),
+                capital_cost=ates_capital_cost,
             )
 
             # ATES heat resource bus at the constant ATES top temperature. The
@@ -3232,8 +3237,8 @@ def add_heat(
             # Discharger: ATES store -> ATES heat resource bus. No CAPEX.
             n.add(
                 "Link",
-                heat_nodes
-                + f" {heat_system} aquifer thermal energy storage discharger",
+                heat_nodes,
+                suffix=f" {heat_system} aquifer thermal energy storage discharger",
                 bus0=heat_nodes + f" {heat_system} aquifer thermal energy storage",
                 bus1=HeatSource.ATES.resource_bus(heat_nodes, heat_system),
                 efficiency=1.0,
@@ -3251,9 +3256,7 @@ def add_heat(
                 e_nom_extendable=True,
                 e_nom_max=ates_e_nom_max,
                 carrier=f"{heat_system} aquifer thermal energy storage",
-                standing_loss=ates_data["hourly_standing_losses"]
-                .fillna(0.0)
-                .to_numpy(),
+                standing_loss=ates_standing_loss,
                 lifetime=ates_lifetime,
             )
 

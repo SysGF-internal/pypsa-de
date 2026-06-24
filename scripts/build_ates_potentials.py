@@ -140,8 +140,7 @@ if __name__ == "__main__":
     logger.info(f"ATES feasible in {int(feasible.sum())} of {len(feasible)} regions")
 
     # Annual loss factor -> hourly loss factor -> hourly standing loss.
-    hourly_losses = ates_by_region["VERLUSTRATE"] ** (1 / HOURS_PER_YEAR)
-    hourly_standing_losses = 1 - hourly_losses
+    hourly_standing_losses = 1 - ates_by_region["VERLUSTRATE"] ** (1 / HOURS_PER_YEAR)
 
     # Annualise the overnight CAPEX.
     annuity = calculate_annuity(
