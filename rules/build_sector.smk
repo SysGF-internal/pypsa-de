@@ -382,11 +382,85 @@ rule build_geothermal_heat_potential:
 
 
 rule build_ates_potentials:
+    message:
+        "Building aquifer thermal energy storage (ATES) potentials for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
+    params:
+        data_source=config_provider(
+            "sector", "district_heating", "ates", "data_source"
+        ),
+        lifetime=config_provider("sector", "district_heating", "ates", "lifetime"),
+        discount_rate=config_provider("costs", "fill_values", "discount rate"),
+        suitable_aquifer_types=config_provider(
+            "sector", "district_heating", "ates", "suitable_aquifer_types"
+        ),
+        aquifer_volumetric_heat_capacity=config_provider(
+            "sector",
+            "district_heating",
+            "ates",
+            "aquifer_volumetric_heat_capacity",
+        ),
+        fraction_of_aquifer_area_available=config_provider(
+            "sector",
+            "district_heating",
+            "ates",
+            "fraction_of_aquifer_area_available",
+        ),
+        effective_screen_length=config_provider(
+            "sector", "district_heating", "ates", "effective_screen_length"
+        ),
+        dh_area_buffer=config_provider(
+            "sector", "district_heating", "dh_areas", "buffer"
+        ),
+        ignore_missing_regions=config_provider(
+            "sector", "district_heating", "ates", "ignore_missing_regions"
+        ),
+        countries=config_provider("countries"),
     input:
-        ates_grid=config_provider(
-            "sector", "district_heating", "ates", "data_file"
+        ates_grid=lambda w: (
+            config_provider("sector", "district_heating", "ates", "data_file")(w)
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "hi_grid"
+            else []
+        ),
+        aquifer_shapes_shp=lambda w: (
+            rules.retrieve_aquifer_data_bgr.output["aquifer_shapes"][0]
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "bgr"
+            else []
+        ),
+        dh_areas=lambda w: (
+            resources("dh_areas_base_s_{clusters}.geojson")
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "bgr"
+            else []
         ),
         regions_onshore=input_regions_onshore_district_heating,
+        central_heating_forward_temperature_profiles=lambda w: (
+            resources(
+                "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
+            )
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "bgr"
+            else []
+        ),
+        central_heating_return_temperature_profiles=lambda w: (
+            resources(
+                "central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
+            )
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "bgr"
+            else []
+        ),
     output:
         ates_potentials=resources(
             "ates_potentials_base_s_{clusters}_{planning_horizons}.csv"
@@ -397,11 +471,6 @@ rule build_ates_potentials:
         benchmarks("build_ates_potentials_s_{clusters}_{planning_horizons}")
     resources:
         mem_mb=8000,
-    params:
-        lifetime=config_provider("sector", "district_heating", "ates", "lifetime"),
-        discount_rate=config_provider("costs", "fill_values", "discount rate"),
-    message:
-        "Building aquifer thermal energy storage (ATES) potentials for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
     script:
         scripts("build_ates_potentials.py")
 

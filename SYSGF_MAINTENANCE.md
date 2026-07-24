@@ -21,16 +21,28 @@ The integration line is based on the SysGF `dev` history and contains:
 - the layered and energy-only PTES models, their validation and scenario files;
 - SysGF-TUB PR #1, with river/lake processing retained in native EPSG:4326;
 - SysGF-TUB PR #2's PTES simplification, inherited through PR #3;
-- SysGF-TUB PR #3's HI-grid ATES aggregation and network model;
+- SysGF-TUB PR #3's HI-grid ATES aggregation and network model, alongside the
+  retained public BGR potential model;
 - schema-safe config generation and focused regression tests.
 
-ATES is disabled by default. Enabling it requires:
+ATES is disabled by default. The public BGR pathway remains the default source:
 
 ```yaml
 sector:
   district_heating:
     ates:
       enable: true
+      data_source: bgr
+```
+
+The separately licensed HI-grid pathway requires:
+
+```yaml
+sector:
+  district_heating:
+    ates:
+      enable: true
+      data_source: hi_grid
       data_file: /path/to/licensed/HI_ATES_grid.gpkg
   heat_sources:
     urban central:
@@ -39,8 +51,8 @@ sector:
 ```
 
 The GeoPackage must provide `CAPEX_EUR_MW`, `VERLUSTRATE`, and geometry. It is
-not stored in Git. The handover code interprets `VERLUSTRATE` as the fraction
-of energy retained after one year; confirm this with HI before production use.
+not stored in Git. HI confirmed the regional inverse-CAPEX weighting and the
+conversion `standing_loss = 1 - VERLUSTRATE ** (1 / 8760)`.
 
 ## Test ladder
 
@@ -76,10 +88,11 @@ promotion test.
 
 ## Known integration gates
 
-- Obtain the licensed HI GeoPackage and confirm `VERLUSTRATE` semantics.
-- Decide whether the divergent `dh-subnodes` line contains changes not already
-  represented by the SysGF/DE implementation before porting it from its newer
-  upstream base.
+- Obtain production approval for the licensed HI GeoPackage; the supplied dummy
+  file is suitable only for schema and pipeline checks.
+- Keep the newer DH-subnode implementation in PyPSA-DE. It filters the selected
+  countries before resolving the explicitly represented cumulative demand
+  share, so the older divergent `dh-subnodes` branch can be archived.
 - Treat the older `layered-ptes-energy-exact`, `add-river-*`, `add-seawater-*`,
   and `create-example-data` branches as archival unless a missing behavior is
   demonstrated by a test.
