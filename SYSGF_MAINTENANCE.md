@@ -92,10 +92,19 @@ pixi run snakemake -n --cores 1 \
 run the complete `pixi run pytest test` in a connected environment.
 
 The committed integration DAG config deliberately disables Ariadne scenario
-management. The normal DE default first requires a valid generated
-`config/scenarios.automated.yaml`; without it, the default DAG cannot resolve
-`KN2045_Mix`. Treat generation of that file and its external IIASA inputs as a
-production-run prerequisite rather than a code integration check.
+management. Whenever `run.name`, the configured manual scenario YAML or its
+scenario definitions change, regenerate the DE production file before running
+the normal DAG:
+
+```bash
+pixi run snakemake --cores 1 --force build_scenarios
+```
+
+`build_scenarios` is the single DE production entry point. It reads
+`run.scenarios.manual_file`, retrieves/uses the configured Ariadne/IIASA data,
+and writes `run.scenarios.file` (by default
+`config/scenarios.automated.yaml`). The upstream generic `create_scenarios`
+rule is intentionally not exposed in DE because it does not add those data.
 
 For workflow promotion, run the existing small DE build and the PTES feature
 matrix, then add one BGR-ATES and one licensed HI-grid-ATES scenario. Record
@@ -106,7 +115,10 @@ config, commit, solver, objective and output-network path.
 - Production approval for the licensed HI dataset; the dummy file is not
   research input.
 - Local census-area input when census-based DH geometry refinement is enabled.
-- Copernicus Marine credentials for seawater retrieval.
+- Copernicus Marine credentials for primary seawater retrieval, supplied as
+  `COPERNICUSMARINE_USERNAME` and `COPERNICUSMARINE_PASSWORD` via the shell or
+  an untracked repository-root `.env` file. The default archive source does
+  not require them.
 - External downloads and a solver for full end-to-end builds.
 - Review of the temperature-blindness study's stage-1/stage-2 production runs;
   the committed scenario/DAG checks do not replace those solves.

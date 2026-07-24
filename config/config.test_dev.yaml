@@ -11,7 +11,7 @@
 # exercises are documented in config/scenarios.test_dev.yaml.
 #
 # Usage (after activating the pixi env on the cluster):
-#   pixi run snakemake --configfile=config/config.test_dev.yaml build_scenarios
+#   pixi run snakemake --configfile=config/config.test_dev.yaml -f build_scenarios
 #   pixi run snakemake --profile slurm --configfile=config/config.test_dev.yaml evaluate_ptes_feature_matrix
 #
 # The evaluate_ptes_feature_matrix target solves all scenario networks and
