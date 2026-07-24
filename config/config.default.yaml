@@ -704,6 +704,11 @@ sector:
         max_groundwater_depth: -10  # m below surface (negative); cells with WTD >= this are dropped
     ates:
       enable: false
+      # Keep the public BGR potential model available; select hi_grid only
+      # after configuring the separately licensed HI GeoPackage below.
+      data_source: bgr
+      data_file: null
+      lifetime: 20
       suitable_aquifer_types:
       - Highly productive porous aquifers
       aquifer_volumetric_heat_capacity: 2600
@@ -751,6 +756,7 @@ sector:
           buffer_absolute: 0
     heat_source_temperatures:
       geothermal: 65
+      ates: 90
       electrolysis_waste: 70
       fuel_cell_waste: 70
       fischer_tropsch_waste: 200

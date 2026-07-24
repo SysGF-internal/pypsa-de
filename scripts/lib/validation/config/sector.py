@@ -161,14 +161,14 @@ class _PtesConfig(BaseModel):
         "pre-computed in `build_ptes_operations`.",
     )
     top_temperature: float | Literal["forward"] = Field(
-        90,
+        90.0,
         description="PTES top layer temperature in °C. When `top_temperature` falls below the nodal forward "
         "temperature, additional heating (boosting) is needed during discharge following a similar logic as "
         "for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature "
         "profile dynamically.",
     )
     bottom_temperature: float | Literal["return"] = Field(
-        35,
+        35.0,
         description="PTES bottom layer temperature in °C. Can be set to 'return' to follow the return "
         "temperature profile dynamically.",
     )
@@ -271,6 +271,33 @@ class _PtesConfig(BaseModel):
         return self
 
 
+class _AtesConfig(BaseModel):
+    """Aquifer thermal energy storage (ATES) settings."""
+
+    enable: bool = False
+    data_source: Literal["bgr", "hi_grid"] = Field(
+        "bgr",
+        description="ATES potential source: the legacy public BGR aquifer model or the licensed HI gridded dataset.",
+    )
+    data_file: str | None = Field(
+        None,
+        description="Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'.",
+    )
+    lifetime: float = Field(20, gt=0)
+    marginal_cost_charger: float = 0.035
+
+    # Legacy BGR potential-model settings.
+    suitable_aquifer_types: list[str] = Field(
+        default_factory=lambda: ["Highly productive porous aquifers"]
+    )
+    aquifer_volumetric_heat_capacity: float = 2600
+    fraction_of_aquifer_area_available: float = 0.2
+    effective_screen_length: float = 20
+    capex_as_fraction_of_geothermal_heat_source: float = 0.75
+    recovery_factor: float = 0.6
+    ignore_missing_regions: bool = False
+
+
 class _DistrictHeatingConfig(ConfigModel):
     """Configuration for `sector.district_heating` settings."""
 
@@ -319,22 +346,12 @@ class _DistrictHeatingConfig(ConfigModel):
         default_factory=_PtesConfig,
         description="Pit thermal energy storage (PTES) settings.",
     )
-    ates: dict[str, Any] = Field(
-        default_factory=lambda: {
-            "enable": False,
-            "suitable_aquifer_types": ["Highly productive porous aquifers"],
-            "aquifer_volumetric_heat_capacity": 2600,
-            "fraction_of_aquifer_area_available": 0.2,
-            "effective_screen_length": 20,
-            "capex_as_fraction_of_geothermal_heat_source": 0.75,
-            "recovery_factor": 0.6,
-            "marginal_cost_charger": 0.035,
-            "ignore_missing_regions": False,
-        },
+    ates: _AtesConfig = Field(
+        default_factory=_AtesConfig,
         description="Aquifer thermal energy storage settings.",
     )
     heat_source_cooling: float | dict[str, float] = Field(
-        6,
+        6.0,
         description="Typical source-side cooling dT [K] applied by the heat "
         "pump: either a flat scalar for all sources or a per-source mapping "
         "with a required 'default' entry covering unlisted sources (PTES "
@@ -360,6 +377,7 @@ class _DistrictHeatingConfig(ConfigModel):
                 "entry for unlisted heat sources"
             )
         return v
+
     log_heat_pump_cooling_iterations: bool = Field(
         False,
         description="Debugging aid: write the full per-node, per-timestep, "
@@ -388,6 +406,7 @@ class _DistrictHeatingConfig(ConfigModel):
     heat_source_temperatures: dict[str, float] = Field(
         default_factory=lambda: {
             "geothermal": 65,
+            "ates": 90,
             "electrolysis_waste": 70,
             "fuel_cell_waste": 70,
             "fischer_tropsch_waste": 200,
@@ -1287,6 +1306,27 @@ class SectorConfig(BaseModel):
                     f"'{option_key}' is 0 or unset. Either set it to a value "
                     f"in (0, 1] or remove '{source.value}' from heat_sources."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_ates_configuration(self):
+        """Validate the additional inputs needed by licensed HI-grid ATES."""
+        ates = self.district_heating.ates
+        if not ates.enable or ates.data_source == "bgr":
+            return self
+
+        urban_central_sources = self.heat_sources.get(HeatSystemType.URBAN_CENTRAL, [])
+        if HeatSource.ATES not in urban_central_sources:
+            raise ValueError(
+                "district_heating.ates.data_source is 'hi_grid' but 'ates' is "
+                "not in heat_sources.urban central."
+            )
+        if not ates.data_file:
+            raise ValueError(
+                "district_heating.ates.data_source is 'hi_grid' but no ATES "
+                "input file is configured. Set district_heating.ates.data_file "
+                "to the licensed GeoPackage."
+            )
         return self
 
     @model_validator(mode="after")

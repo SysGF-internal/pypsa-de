@@ -45,7 +45,6 @@ Outputs
 import gc
 import logging
 import sys
-
 from pathlib import Path
 
 # _helpers.py lives in the parent scripts/ directory; Snakemake 9 only adds the
@@ -63,6 +62,7 @@ from _helpers import (
     set_scenario_config,
     update_config_from_wildcards,
 )
+
 from scripts.build_surface_water_heat_potentials.approximators.river_water_heat_approximator import (
     RiverWaterHeatApproximator,
 )
@@ -131,7 +131,6 @@ def load_hera_data(
         river_discharge.rename({"lat": "latitude", "lon": "longitude"})
         .rio.write_crs("EPSG:4326")
         .rio.clip_box(minx, miny, maxx, maxy)
-        .rio.reproject("EPSG:3035")
     )
     result["river_discharge"] = river_discharge
 
@@ -151,7 +150,6 @@ def load_hera_data(
         ambient_temperature.rename({"lat": "latitude", "lon": "longitude"})
         .rio.write_crs("EPSG:4326")
         .rio.clip_box(minx, miny, maxx, maxy)
-        .rio.reproject("EPSG:3035")
     )
     result["ambient_temperature"] = ambient_temperature
 
@@ -290,17 +288,15 @@ def get_regional_result(
 
     # Data processing strategy:
     # 1. Load HERA discharge and temperature data
-    # 2. Clip to region bounds for efficiency
-    # 3. Reproject to EPSG:3035 for accurate spatial calculations
-    # 4. Feed to approximator for heat potential calculation
+    # 2. Clip to region bounds and retain native EPSG:4326
+    # 3. Feed to approximator for heat potential calculation
 
     # Load and concatenate HERA data for all required years with preprocessing
     hera_data = load_hera_data(hera_inputs, snapshots, minx, miny, maxx, maxy)
     river_discharge = hera_data["river_discharge"]
     ambient_temperature = hera_data["ambient_temperature"]
 
-    # Reproject region to match data CRS for spatial calculations
-    region = region.to_crs("EPSG:3035")
+    region = region.to_crs("EPSG:4326")
 
     river_water_heat_approximator = RiverWaterHeatApproximator(
         volume_flow=river_discharge,  # River discharge (volume flow)
@@ -315,11 +311,8 @@ def get_regional_result(
     # Calculate temporal aggregate only if needed (spatial distribution data for plotting, no time dimension)
     if enable_heat_source_maps:
         temporal_aggregate = (
-            river_water_heat_approximator.get_temporal_aggregate()
-            .rio.reproject("EPSG:4326")  # Convert back to WGS84 for output consistency
-            .rename({"x": "longitude", "y": "latitude"})  # Standardize coordinate names
+            river_water_heat_approximator.get_temporal_aggregate().compute()
         )
-        temporal_aggregate = temporal_aggregate.compute()
     else:
         temporal_aggregate = None
 

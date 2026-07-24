@@ -610,10 +610,7 @@ if __name__ == "__main__":
     urban_central_heat_sources = [
         hs
         for hs in heat_sources_by_system[HeatSystemType.URBAN_CENTRAL.value]
-        if not (
-            snakemake.params.ptes_enable
-            and HeatSource(hs).source_type == HeatSourceType.STORAGE
-        )
+        if not (snakemake.params.ptes_enable and HeatSource(hs).is_ptes)
     ]
 
     if urban_central_heat_sources:

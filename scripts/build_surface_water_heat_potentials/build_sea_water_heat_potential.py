@@ -50,6 +50,8 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
+from rioxarray.exceptions import NoDataInBounds, OneDimensionalRaster
+
 from scripts._helpers import (
     configure_logging,
     get_snapshots,
@@ -59,7 +61,6 @@ from scripts._helpers import (
 from scripts.build_surface_water_heat_potentials.approximators.sea_water_heat_approximator import (
     SeaWaterHeatApproximator,
 )
-from rioxarray.exceptions import NoDataInBounds, OneDimensionalRaster
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ def _load_regional_seawater_temperature(
             maxx,
             maxy,
             auto_expand=True,
-        ).rio.reproject("EPSG:3035")
+        )
     except (NoDataInBounds, OneDimensionalRaster, ValueError) as exc:
         logger.warning(
             "Sea-water temperature clip failed for bounds (%.5f, %.5f, %.5f, %.5f): %s",
@@ -171,15 +172,17 @@ def _load_regional_seawater_temperature(
         )
         return None
 
-    if any(water_temperature.sizes.get(dim, 0) < 2 for dim in ["x", "y"]):
+    if any(
+        water_temperature.sizes.get(dim, 0) < 2 for dim in ["longitude", "latitude"]
+    ):
         logger.warning(
-            "Sea-water temperature clip for bounds (%.5f, %.5f, %.5f, %.5f) collapsed to x=%s, y=%s; using empty result",
+            "Sea-water temperature clip for bounds (%.5f, %.5f, %.5f, %.5f) collapsed to longitude=%s, latitude=%s; using empty result",
             minx,
             miny,
             maxx,
             maxy,
-            water_temperature.sizes.get("x", 0),
-            water_temperature.sizes.get("y", 0),
+            water_temperature.sizes.get("longitude", 0),
+            water_temperature.sizes.get("latitude", 0),
         )
         return None
 
@@ -257,7 +260,7 @@ def get_regional_result(
     if water_temperature is None:
         return _empty_result_for_region(original_region, snapshots)
 
-    region = region.to_crs("EPSG:3035")
+    region = region.to_crs("EPSG:4326")
 
     seawater_heat_approximator = SeaWaterHeatApproximator(
         water_temperature=water_temperature,
@@ -266,11 +269,7 @@ def get_regional_result(
 
     spatial_aggregate = seawater_heat_approximator.get_spatial_aggregate()
 
-    temporal_aggregate = (
-        seawater_heat_approximator.get_temporal_aggregate()
-        .rio.reproject("EPSG:4326")
-        .rename({"x": "longitude", "y": "latitude"})
-    )
+    temporal_aggregate = seawater_heat_approximator.get_temporal_aggregate()
 
     spatial_aggregate = spatial_aggregate.compute()
     temporal_aggregate = temporal_aggregate.compute()

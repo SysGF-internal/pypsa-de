@@ -409,18 +409,11 @@ rule build_ates_potentials:
     message:
         "Building aquifer thermal energy storage (ATES) potentials for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
     params:
-        max_top_temperature=config_provider(
-            "sector",
-            "district_heating",
-            "ates",
-            "max_top_temperature",
+        data_source=config_provider(
+            "sector", "district_heating", "ates", "data_source"
         ),
-        min_bottom_temperature=config_provider(
-            "sector",
-            "district_heating",
-            "ates",
-            "min_bottom_temperature",
-        ),
+        lifetime=config_provider("sector", "district_heating", "ates", "lifetime"),
+        discount_rate=config_provider("costs", "fill_values", "discount rate"),
         suitable_aquifer_types=config_provider(
             "sector",
             "district_heating",
@@ -459,14 +452,50 @@ rule build_ates_potentials:
         ),
         countries=config_provider("countries"),
     input:
-        aquifer_shapes_shp=rules.retrieve_aquifer_data_bgr.output["aquifer_shapes"][0],
-        dh_areas=resources("dh_areas_base_s_{clusters}.geojson"),
-        regions_onshore=input_regions_onshore_district_heating,
-        central_heating_forward_temperature_profiles=resources(
-            "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
+        ates_grid=lambda w: (
+            config_provider("sector", "district_heating", "ates", "data_file")(w)
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "hi_grid"
+            else []
         ),
-        central_heating_return_temperature_profiles=resources(
-            "central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
+        aquifer_shapes_shp=lambda w: (
+            rules.retrieve_aquifer_data_bgr.output["aquifer_shapes"][0]
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "bgr"
+            else []
+        ),
+        dh_areas=lambda w: (
+            resources("dh_areas_base_s_{clusters}.geojson")
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "bgr"
+            else []
+        ),
+        regions_onshore=input_regions_onshore_district_heating,
+        central_heating_forward_temperature_profiles=lambda w: (
+            resources(
+                "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
+            )
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "bgr"
+            else []
+        ),
+        central_heating_return_temperature_profiles=lambda w: (
+            resources(
+                "central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
+            )
+            if config_provider(
+                "sector", "district_heating", "ates", "data_source"
+            )(w)
+            == "bgr"
+            else []
         ),
     output:
         ates_potentials=resources(
@@ -477,7 +506,7 @@ rule build_ates_potentials:
     log:
         logs("build_ates_potentials_s_{clusters}_{planning_horizons}.log"),
     benchmark:
-        benchmarks("build_ates_potentials_geothermal_s_{clusters}_{planning_horizons}")
+        benchmarks("build_ates_potentials_s_{clusters}_{planning_horizons}")
     script:
         scripts("build_ates_potentials.py")
 

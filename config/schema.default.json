@@ -2462,6 +2462,7 @@
         "ptes layer 7",
         "ptes layer 8",
         "ptes layer 9",
+        "ates",
         "electrolysis_waste",
         "fischer_tropsch_waste",
         "sabatier_waste",
@@ -4322,7 +4323,7 @@
                       "type": "string"
                     }
                   ],
-                  "default": 90,
+                  "default": 90.0,
                   "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
                 },
                 "bottom_temperature": {
@@ -4335,7 +4336,7 @@
                       "type": "string"
                     }
                   ],
-                  "default": 35,
+                  "default": 35.0,
                   "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
                 },
                 "design_top_temperature": {
@@ -4381,9 +4382,73 @@
               }
             },
             "ates": {
-              "additionalProperties": true,
-              "description": "Aquifer thermal energy storage settings.",
-              "type": "object"
+              "description": "Aquifer thermal energy storage (ATES) settings.",
+              "properties": {
+                "enable": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "data_source": {
+                  "default": "bgr",
+                  "description": "ATES potential source: the legacy public BGR aquifer model or the licensed HI gridded dataset.",
+                  "enum": [
+                    "bgr",
+                    "hi_grid"
+                  ],
+                  "type": "string"
+                },
+                "data_file": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'."
+                },
+                "lifetime": {
+                  "default": 20,
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "marginal_cost_charger": {
+                  "default": 0.035,
+                  "type": "number"
+                },
+                "suitable_aquifer_types": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "aquifer_volumetric_heat_capacity": {
+                  "default": 2600,
+                  "type": "number"
+                },
+                "fraction_of_aquifer_area_available": {
+                  "default": 0.2,
+                  "type": "number"
+                },
+                "effective_screen_length": {
+                  "default": 20,
+                  "type": "number"
+                },
+                "capex_as_fraction_of_geothermal_heat_source": {
+                  "default": 0.75,
+                  "type": "number"
+                },
+                "recovery_factor": {
+                  "default": 0.6,
+                  "type": "number"
+                },
+                "ignore_missing_regions": {
+                  "default": false,
+                  "type": "boolean"
+                }
+              }
             },
             "heat_source_cooling": {
               "anyOf": [
@@ -4397,7 +4462,7 @@
                   "type": "object"
                 }
               ],
-              "default": 6,
+              "default": 6.0,
               "description": "Typical source-side cooling dT [K] applied by the heat pump: either a flat scalar for all sources or a per-source mapping with a required 'default' entry covering unlisted sources (PTES layer sources fall back to a 'ptes' entry before the default). With heat_pump_cooling_iterative this value seeds the iterative solve for preheating central sources."
             },
             "heat_pump_cooling_iterative": {
@@ -4516,6 +4581,7 @@
                 "ptes layer 7",
                 "ptes layer 8",
                 "ptes layer 9",
+                "ates",
                 "electrolysis_waste",
                 "fischer_tropsch_waste",
                 "sabatier_waste",
@@ -6052,6 +6118,75 @@
         }
       }
     },
+    "_AtesConfig": {
+      "description": "Aquifer thermal energy storage (ATES) settings.",
+      "properties": {
+        "enable": {
+          "default": false,
+          "type": "boolean"
+        },
+        "data_source": {
+          "default": "bgr",
+          "description": "ATES potential source: the legacy public BGR aquifer model or the licensed HI gridded dataset.",
+          "enum": [
+            "bgr",
+            "hi_grid"
+          ],
+          "type": "string"
+        },
+        "data_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'."
+        },
+        "lifetime": {
+          "default": 20,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "marginal_cost_charger": {
+          "default": 0.035,
+          "type": "number"
+        },
+        "suitable_aquifer_types": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "aquifer_volumetric_heat_capacity": {
+          "default": 2600,
+          "type": "number"
+        },
+        "fraction_of_aquifer_area_available": {
+          "default": 0.2,
+          "type": "number"
+        },
+        "effective_screen_length": {
+          "default": 20,
+          "type": "number"
+        },
+        "capex_as_fraction_of_geothermal_heat_source": {
+          "default": 0.75,
+          "type": "number"
+        },
+        "recovery_factor": {
+          "default": 0.6,
+          "type": "number"
+        },
+        "ignore_missing_regions": {
+          "default": false,
+          "type": "boolean"
+        }
+      }
+    },
     "_AutarkyConfig": {
       "description": "Configuration for `electricity.autarky` settings.",
       "properties": {
@@ -6560,7 +6695,7 @@
                   "type": "string"
                 }
               ],
-              "default": 90,
+              "default": 90.0,
               "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
             },
             "bottom_temperature": {
@@ -6573,7 +6708,7 @@
                   "type": "string"
                 }
               ],
-              "default": 35,
+              "default": 35.0,
               "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
             },
             "design_top_temperature": {
@@ -6619,9 +6754,73 @@
           }
         },
         "ates": {
-          "additionalProperties": true,
-          "description": "Aquifer thermal energy storage settings.",
-          "type": "object"
+          "description": "Aquifer thermal energy storage (ATES) settings.",
+          "properties": {
+            "enable": {
+              "default": false,
+              "type": "boolean"
+            },
+            "data_source": {
+              "default": "bgr",
+              "description": "ATES potential source: the legacy public BGR aquifer model or the licensed HI gridded dataset.",
+              "enum": [
+                "bgr",
+                "hi_grid"
+              ],
+              "type": "string"
+            },
+            "data_file": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'."
+            },
+            "lifetime": {
+              "default": 20,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "marginal_cost_charger": {
+              "default": 0.035,
+              "type": "number"
+            },
+            "suitable_aquifer_types": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "aquifer_volumetric_heat_capacity": {
+              "default": 2600,
+              "type": "number"
+            },
+            "fraction_of_aquifer_area_available": {
+              "default": 0.2,
+              "type": "number"
+            },
+            "effective_screen_length": {
+              "default": 20,
+              "type": "number"
+            },
+            "capex_as_fraction_of_geothermal_heat_source": {
+              "default": 0.75,
+              "type": "number"
+            },
+            "recovery_factor": {
+              "default": 0.6,
+              "type": "number"
+            },
+            "ignore_missing_regions": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
         },
         "heat_source_cooling": {
           "anyOf": [
@@ -6635,7 +6834,7 @@
               "type": "object"
             }
           ],
-          "default": 6,
+          "default": 6.0,
           "description": "Typical source-side cooling dT [K] applied by the heat pump: either a flat scalar for all sources or a per-source mapping with a required 'default' entry covering unlisted sources (PTES layer sources fall back to a 'ptes' entry before the default). With heat_pump_cooling_iterative this value seeds the iterative solve for preheating central sources."
         },
         "heat_pump_cooling_iterative": {
@@ -7824,7 +8023,7 @@
               "type": "string"
             }
           ],
-          "default": 90,
+          "default": 90.0,
           "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
         },
         "bottom_temperature": {
@@ -7837,7 +8036,7 @@
               "type": "string"
             }
           ],
-          "default": 35,
+          "default": 35.0,
           "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
         },
         "design_top_temperature": {
@@ -11183,7 +11382,7 @@
                       "type": "string"
                     }
                   ],
-                  "default": 90,
+                  "default": 90.0,
                   "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
                 },
                 "bottom_temperature": {
@@ -11196,7 +11395,7 @@
                       "type": "string"
                     }
                   ],
-                  "default": 35,
+                  "default": 35.0,
                   "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
                 },
                 "design_top_temperature": {
@@ -11242,9 +11441,73 @@
               }
             },
             "ates": {
-              "additionalProperties": true,
-              "description": "Aquifer thermal energy storage settings.",
-              "type": "object"
+              "description": "Aquifer thermal energy storage (ATES) settings.",
+              "properties": {
+                "enable": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "data_source": {
+                  "default": "bgr",
+                  "description": "ATES potential source: the legacy public BGR aquifer model or the licensed HI gridded dataset.",
+                  "enum": [
+                    "bgr",
+                    "hi_grid"
+                  ],
+                  "type": "string"
+                },
+                "data_file": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'."
+                },
+                "lifetime": {
+                  "default": 20,
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "marginal_cost_charger": {
+                  "default": 0.035,
+                  "type": "number"
+                },
+                "suitable_aquifer_types": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "aquifer_volumetric_heat_capacity": {
+                  "default": 2600,
+                  "type": "number"
+                },
+                "fraction_of_aquifer_area_available": {
+                  "default": 0.2,
+                  "type": "number"
+                },
+                "effective_screen_length": {
+                  "default": 20,
+                  "type": "number"
+                },
+                "capex_as_fraction_of_geothermal_heat_source": {
+                  "default": 0.75,
+                  "type": "number"
+                },
+                "recovery_factor": {
+                  "default": 0.6,
+                  "type": "number"
+                },
+                "ignore_missing_regions": {
+                  "default": false,
+                  "type": "boolean"
+                }
+              }
             },
             "heat_source_cooling": {
               "anyOf": [
@@ -11258,7 +11521,7 @@
                   "type": "object"
                 }
               ],
-              "default": 6,
+              "default": 6.0,
               "description": "Typical source-side cooling dT [K] applied by the heat pump: either a flat scalar for all sources or a per-source mapping with a required 'default' entry covering unlisted sources (PTES layer sources fall back to a 'ptes' entry before the default). With heat_pump_cooling_iterative this value seeds the iterative solve for preheating central sources."
             },
             "heat_pump_cooling_iterative": {
@@ -11377,6 +11640,7 @@
                 "ptes layer 7",
                 "ptes layer 8",
                 "ptes layer 9",
+                "ates",
                 "electrolysis_waste",
                 "fischer_tropsch_waste",
                 "sabatier_waste",

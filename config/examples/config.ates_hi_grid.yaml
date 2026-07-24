@@ -1,0 +1,14 @@
+# Licensed HI data is not distributed with the repository.
+# Replace this path after the licence/data handoff has been completed.
+sector:
+  district_heating:
+    ates:
+      enable: true
+      data_source: hi_grid
+      data_file: data/ates/HI_ATES_grid.gpkg
+  heat_sources:
+    urban central:
+    - air
+    - geothermal
+    - ptes
+    - ates

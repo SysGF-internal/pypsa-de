@@ -11,6 +11,7 @@ The json schema is also contributed to the schemastore.org and matches
 """
 
 import re
+from enum import Enum
 
 from pydantic import ValidationError
 from ruamel.yaml import YAML
@@ -37,6 +38,21 @@ def generate_config_defaults(path: str = "config/config.{configname}.yaml") -> d
     """Generate config defaults YAML file and return the defaults dict."""
     from ruamel.yaml.comments import CommentedMap
 
+    def convert_enum_values(value):
+        """Convert enums recursively without stringifying numeric mapping keys."""
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, dict):
+            return {
+                convert_enum_values(key): convert_enum_values(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [convert_enum_values(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(convert_enum_values(item) for item in value)
+        return value
+
     def convert_to_field_name(key: str) -> str:
         """Convert dash-case to snake_case for field lookup."""
         return key.replace("-", "_")
@@ -44,7 +60,7 @@ def generate_config_defaults(path: str = "config/config.{configname}.yaml") -> d
     # by_alias is needed to export dash-case instead of snake_case (which are some set aliases)
     # the goal should be to use snake_case consistently
     config = validate_config({})
-    defaults = config.model_dump(by_alias=True)
+    defaults = convert_enum_values(config.model_dump(by_alias=True, mode="python"))
 
     # Create YAML instance with custom settings
     yaml_writer = YAML()

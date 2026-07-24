@@ -2978,11 +2978,13 @@ def add_heat(
     hourly_heat_demand_total_file: str,
     ptes_operations_file: str,
     ptes_potentials_file: str,
-    ates_e_nom_max: str,
+    ates_potentials_file: str,
+    ates_data_source: str,
     ates_capex_as_fraction_of_geothermal_heat_source: float,
     ates_recovery_factor: float,
     enable_ates: bool,
     ates_marginal_cost_charger: float,
+    ates_lifetime: float,
     district_heat_info: pd.DataFrame,
     solar_thermal_total_file: str,
     retro_cost_file: str,
@@ -3528,9 +3530,7 @@ def add_heat(
                             .reindex(heat_nodes)
                         )
                         if resistive_boosting:
-                            boost_bus = (
-                                heat_nodes + f" {heat_system} ptes boost demand"
-                            )
+                            boost_bus = heat_nodes + f" {heat_system} ptes boost demand"
                             return_volume_efficiency = 1.0
                             boost_efficiency = (
                                 ptes_ds["resistive_boost_per_m3"]
@@ -3567,7 +3567,8 @@ def add_heat(
                             "Link",
                             heat_nodes,
                             suffix=f" {heat_system} water pits discharger{layer_suffix}",
-                            bus0=heat_nodes + f" {heat_system} water pits{layer_suffix}",
+                            bus0=heat_nodes
+                            + f" {heat_system} water pits{layer_suffix}",
                             bus1=heat_nodes + f" {heat_system} heat",
                             bus2=return_layer_bus,
                             bus3=boost_bus,
@@ -3622,7 +3623,8 @@ def add_heat(
                             suffix=f" {heat_system} ptes{layer_suffix} heat pump",
                             bus0=heat_nodes + f" {heat_system} heat",
                             bus1=parent_of_subnode.loc[heat_nodes].values,
-                            bus2=heat_nodes + f" {heat_system} ptes hp source{layer_suffix}",
+                            bus2=heat_nodes
+                            + f" {heat_system} ptes hp source{layer_suffix}",
                             bus3=hp_return_layer_bus,
                             efficiency=booster_elec_efficiency,
                             efficiency2=booster_volume_efficiency,
@@ -3661,7 +3663,8 @@ def add_heat(
                             "Link",
                             heat_nodes,
                             suffix=f" {heat_system} water pits inter{layer_suffix}-{lower_layer}",
-                            bus0=heat_nodes + f" {heat_system} water pits{layer_suffix}",
+                            bus0=heat_nodes
+                            + f" {heat_system} water pits{layer_suffix}",
                             bus1=heat_nodes + f" {heat_system} water pits{lower_layer}",
                             carrier=f"{heat_system} water pits interlayer",
                             p_nom_extendable=True,
@@ -3883,7 +3886,11 @@ def add_heat(
                         lifetime=costs.at[costs_name_heat_pump, "lifetime"],
                     )
 
-        if enable_ates and heat_system == HeatSystem.URBAN_CENTRAL:
+        if (
+            enable_ates
+            and ates_data_source == "bgr"
+            and heat_system == HeatSystem.URBAN_CENTRAL
+        ):
             n.add("Carrier", f"{heat_system} aquifer thermal energy storage")
 
             n.add(
@@ -3924,7 +3931,7 @@ def add_heat(
                 / 2,
             )
 
-            ates_e_nom_max_data = pd.read_csv(ates_e_nom_max, index_col=0)[
+            ates_e_nom_max_data = pd.read_csv(ates_potentials_file, index_col=0)[
                 "ates_potential"
             ]
             n.add(
@@ -3940,18 +3947,82 @@ def add_heat(
                 lifetime=costs.at["central geothermal heat source", "lifetime"],
             )
 
+        if (
+            enable_ates
+            and ates_data_source == "hi_grid"
+            and heat_system == HeatSystem.URBAN_CENTRAL
+        ):
+            ates_data = pd.read_csv(ates_potentials_file, index_col=0).reindex(
+                heat_nodes
+            )
+            ates_feasible = ates_data["feasible"].fillna(False).astype(bool)
+            ates_e_nom_max = pd.Series(
+                np.where(ates_feasible, np.inf, 0.0), index=heat_nodes
+            )
+
+            n.add("Carrier", f"{heat_system} aquifer thermal energy storage")
+            n.add(
+                "Bus",
+                heat_nodes + f" {heat_system} aquifer thermal energy storage",
+                location=heat_nodes,
+                carrier=f"{heat_system} aquifer thermal energy storage",
+                unit="MWh_th",
+            )
+            n.add(
+                "Link",
+                heat_nodes,
+                suffix=f" {heat_system} aquifer thermal energy storage charger",
+                bus0=heat_nodes + f" {heat_system} heat",
+                bus1=heat_nodes + f" {heat_system} aquifer thermal energy storage",
+                efficiency=1.0,
+                carrier=f"{heat_system} aquifer thermal energy storage charger",
+                p_nom_extendable=True,
+                lifetime=ates_lifetime,
+                marginal_cost=ates_marginal_cost_charger,
+                capital_cost=ates_data["capital_cost"].fillna(0.0),
+            )
+            n.add(
+                "Bus",
+                HeatSource.ATES.resource_bus(heat_nodes, heat_system),
+                location=heat_nodes,
+                carrier=f"{heat_system} {HeatSource.ATES} heat",
+                unit="MWh_th",
+            )
+            n.add(
+                "Link",
+                heat_nodes,
+                suffix=f" {heat_system} aquifer thermal energy storage discharger",
+                bus0=heat_nodes + f" {heat_system} aquifer thermal energy storage",
+                bus1=HeatSource.ATES.resource_bus(heat_nodes, heat_system),
+                efficiency=1.0,
+                carrier=f"{heat_system} aquifer thermal energy storage discharger",
+                p_nom_extendable=True,
+                lifetime=ates_lifetime,
+            )
+            n.add(
+                "Store",
+                heat_nodes,
+                suffix=f" {heat_system} aquifer thermal energy storage",
+                bus=heat_nodes + f" {heat_system} aquifer thermal energy storage",
+                e_cyclic=True,
+                e_nom_extendable=True,
+                e_nom_max=ates_e_nom_max,
+                carrier=f"{heat_system} aquifer thermal energy storage",
+                standing_loss=ates_data["hourly_standing_losses"].fillna(0.0),
+                lifetime=ates_lifetime,
+            )
+
         ## Add heat pumps
         for heat_source in params.heat_sources[heat_system.system_type.value]:
             # Convert string to HeatSource enum
             heat_source = HeatSource(heat_source)
 
-            # PTES (all storage sources) uses dedicated routing in the water
-            # pits block above and is not wired through the generic
-            # heat-source pathway.
+            # PTES uses dedicated routing in the water-pits block above. ATES
+            # remains on the generic heat-source pathway for temperature lift.
             if (
                 heat_system == HeatSystem.URBAN_CENTRAL
                 and options["district_heating"]["ptes"]["enable"]
-                and heat_source.source_type == HeatSourceType.STORAGE
+                and heat_source.is_ptes
             ):
                 continue
 
@@ -4003,7 +4074,9 @@ def add_heat(
                         "Generator",
                         heat_source.resource_bus(this_heat_source_nodes, heat_system),
                         suffix=" vent",
-                        bus=heat_source.resource_bus(this_heat_source_nodes, heat_system),
+                        bus=heat_source.resource_bus(
+                            this_heat_source_nodes, heat_system
+                        ),
                         location=this_heat_source_nodes,
                         carrier=resource_vent_carrier,
                         p_nom_extendable=True,
@@ -4114,7 +4187,9 @@ def add_heat(
                     suffix=f" {heat_system} {heat_source} heat pump",
                     bus0=heat_source.hp_output_bus(this_heat_source_nodes, heat_system),
                     bus1=parent_of_subnode.loc[this_heat_source_nodes].values,
-                    bus2=heat_source.intermediate_bus(this_heat_source_nodes, heat_system),
+                    bus2=heat_source.intermediate_bus(
+                        this_heat_source_nodes, heat_system
+                    ),
                     carrier=f"{heat_system} {heat_source} heat pump",
                     efficiency=1 / cop_heat_pump,
                     efficiency2=heat_source.hp_eff2(cop_heat_pump),
@@ -4134,9 +4209,7 @@ def add_heat(
             if (
                 heat_system == HeatSystem.URBAN_CENTRAL
                 and options["district_heating"]["ptes"]["enable"]
-                and options["district_heating"]["ptes"][
-                    "discharge_resistive_boosting"
-                ]
+                and options["district_heating"]["ptes"]["discharge_resistive_boosting"]
             ):
                 # Dual-use resistive heater: a single invested capacity that
                 # either supplies DH directly (stand-alone, e.g. at low
@@ -7220,7 +7293,10 @@ if __name__ == "__main__":
             hourly_heat_demand_total_file=snakemake.input.hourly_heat_demand_total,
             ptes_operations_file=getattr(snakemake.input, "ptes_operations", ""),
             ptes_potentials_file=snakemake.input.ptes_potentials,
-            ates_e_nom_max=snakemake.input.ates_potentials,
+            ates_potentials_file=getattr(snakemake.input, "ates_potentials", ""),
+            ates_data_source=snakemake.params.sector["district_heating"]["ates"][
+                "data_source"
+            ],
             ates_capex_as_fraction_of_geothermal_heat_source=snakemake.params.sector[
                 "district_heating"
             ]["ates"]["capex_as_fraction_of_geothermal_heat_source"],
@@ -7229,6 +7305,9 @@ if __name__ == "__main__":
             ]["marginal_cost_charger"],
             ates_recovery_factor=snakemake.params.sector["district_heating"]["ates"][
                 "recovery_factor"
+            ],
+            ates_lifetime=snakemake.params.sector["district_heating"]["ates"][
+                "lifetime"
             ],
             enable_ates=snakemake.params.sector["district_heating"]["ates"]["enable"],
             district_heat_info=district_heat_info,

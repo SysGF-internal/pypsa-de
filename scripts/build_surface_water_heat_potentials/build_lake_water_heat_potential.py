@@ -66,6 +66,7 @@ from _helpers import (
     set_scenario_config,
     update_config_from_wildcards,
 )
+
 from scripts.build_surface_water_heat_potentials.approximators.lake_water_heat_approximator import (
     LakeWaterHeatApproximator,
 )
@@ -105,7 +106,7 @@ def load_hera_data(
     Returns
     -------
     xr.DataArray
-        Ambient temperature data reprojected to EPSG:3035.
+        Ambient temperature data in native EPSG:4326.
     """
     temp_files = [
         v for k, v in hera_inputs.items() if k.startswith("hera_ambient_temperature_")
@@ -134,7 +135,6 @@ def load_hera_data(
         ambient_temperature.rename({"lat": "latitude", "lon": "longitude"})
         .rio.write_crs("EPSG:4326")
         .rio.clip_box(minx, miny, maxx, maxy)
-        .rio.reproject("EPSG:3035")
     )
 
 
@@ -256,8 +256,8 @@ def get_regional_result(
     minx, miny, maxx, maxy = region.total_bounds
     ambient_temperature = load_hera_data(hera_inputs, snapshots, minx, miny, maxx, maxy)
 
-    region = region.to_crs("EPSG:3035")
-    lake_shapes = lake_shapes.to_crs("EPSG:3035")
+    region = region.to_crs("EPSG:4326")
+    lake_shapes = lake_shapes.to_crs("EPSG:4326")
 
     lake_water_heat_approximator = LakeWaterHeatApproximator(
         ambient_temperature=ambient_temperature,
@@ -269,9 +269,7 @@ def get_regional_result(
 
     if enable_heat_source_maps:
         temporal_aggregate = (
-            lake_water_heat_approximator.get_temporal_aggregate()
-            .rio.reproject("EPSG:4326")
-            .compute()
+            lake_water_heat_approximator.get_temporal_aggregate().compute()
         )
     else:
         temporal_aggregate = None
@@ -407,13 +405,10 @@ if __name__ == "__main__":
         logger.info(f"  {region}: {power_mean[region]:.2f} MW")
 
     # Concatenate average temperature for all regions into single dataset
-    temperature = (
-        xr.concat(
-            [res["spatial aggregate"]["average_temperature"] for res in results],
-            dim="name",
-        )
-        .assign_coords(name=regions_onshore.index)
-    )
+    temperature = xr.concat(
+        [res["spatial aggregate"]["average_temperature"] for res in results],
+        dim="name",
+    ).assign_coords(name=regions_onshore.index)
 
     # Align temperature data to snapshots, use nearest to handle any minor decimal differences
     temperature = temperature.sel(time=snapshots, method="nearest").assign_coords(

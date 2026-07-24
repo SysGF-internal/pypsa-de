@@ -45,10 +45,89 @@ References
 import logging
 
 import geopandas as gpd
+import pandas as pd
 import xarray as xr
-from _helpers import configure_logging, set_scenario_config
+
+from scripts._helpers import configure_logging, set_scenario_config
 
 logger = logging.getLogger(__name__)
+HOURS_PER_YEAR = 8760
+
+
+def annual_retention_to_hourly_standing_loss(
+    annual_retention: pd.Series,
+) -> pd.Series:
+    """
+    Convert an annual retained-energy fraction to hourly self-discharge.
+
+    The interpretation of the HI source column ``VERLUSTRATE`` must be
+    confirmed with the data provider before production use. The handover
+    implementation treats it as a retention factor rather than a lost-energy
+    fraction.
+    """
+    return 1 - annual_retention ** (1 / HOURS_PER_YEAR)
+
+
+def aggregate_ates_to_regions(
+    ates: gpd.GeoDataFrame,
+    regions: gpd.GeoDataFrame,
+    capex_col: str = "CAPEX_EUR_MW",
+    loss_col: str = "VERLUSTRATE",
+) -> pd.DataFrame:
+    """Aggregate HI grid cells using inverse-CAPEX weights per model region."""
+    cells = ates.to_crs(regions.crs).copy()
+    cells["geometry"] = cells.geometry.representative_point()
+    joined = gpd.sjoin(
+        cells,
+        regions[["name", "geometry"]],
+        how="inner",
+        predicate="within",
+    )
+    joined["weight"] = 1.0 / joined[capex_col]
+    frame = pd.DataFrame(joined.drop(columns="geometry"))
+
+    def weighted_average(group):
+        weights = group["weight"]
+        return pd.Series(
+            {
+                capex_col: (group[capex_col] * weights).sum() / weights.sum(),
+                loss_col: (group[loss_col] * weights).sum() / weights.sum(),
+                "n_cells": len(group),
+            }
+        )
+
+    aggregated = frame.groupby("name", sort=False).apply(
+        weighted_average, include_groups=False
+    )
+    return aggregated.reindex(regions["name"])
+
+
+def build_hi_grid_potentials(snakemake) -> None:
+    """Build annualised regional cost/loss inputs from the licensed HI grid."""
+    from scripts.add_electricity import calculate_annuity
+
+    regions = gpd.read_file(snakemake.input.regions_onshore)
+    ates_grid = gpd.read_file(snakemake.input.ates_grid)[
+        ["CAPEX_EUR_MW", "VERLUSTRATE", "geometry"]
+    ]
+    ates_by_region = aggregate_ates_to_regions(ates_grid, regions)
+    feasible = ates_by_region["n_cells"].notna() & (ates_by_region["n_cells"] > 0)
+    annuity = calculate_annuity(
+        snakemake.params.lifetime, snakemake.params.discount_rate
+    )
+
+    output = pd.DataFrame(
+        {
+            "capital_cost": (ates_by_region["CAPEX_EUR_MW"] * annuity).where(
+                feasible, 0.0
+            ),
+            "hourly_standing_losses": annual_retention_to_hourly_standing_loss(
+                ates_by_region["VERLUSTRATE"]
+            ).where(feasible, 0.0),
+            "feasible": feasible,
+        }
+    )
+    output.to_csv(snakemake.output.ates_potentials, index_label="name")
 
 
 def mwh_ates_per_m2(
@@ -373,7 +452,7 @@ def check_aquifer_coverage(
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "build_ates_potentials", clusters="48", planning_horizons=2030
@@ -381,6 +460,10 @@ if __name__ == "__main__":
 
     configure_logging(snakemake)
     set_scenario_config(snakemake)
+
+    if snakemake.params.data_source == "hi_grid":
+        build_hi_grid_potentials(snakemake)
+        raise SystemExit(0)
 
     # get onshore regions and index them by region name
     regions_onshore = gpd.read_file(snakemake.input.regions_onshore)
