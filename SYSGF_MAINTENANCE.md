@@ -25,6 +25,7 @@ the consolidated SysGF PyPSA-Eur history. It includes:
 - native-EPSG:4326 river/lake/seawater processing while retaining DE's robust
   empty/inland seawater handling;
 - both ATES research paths described below;
+- executable SysGF district-heating reporting helpers and lint-clean plot scripts;
 - synchronized data-version ordering and focused regression tests.
 
 ## ATES data sources

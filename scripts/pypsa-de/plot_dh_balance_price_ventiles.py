@@ -18,9 +18,10 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pypsa
@@ -29,8 +30,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts._helpers import configure_logging, mock_snakemake
-from scripts.sysgf_plot_helpers import apply_carrier_groups, clean_label
+from scripts.sysgf_plot_helpers import (  # noqa: E402
+    apply_carrier_groups,
+    clean_label,
+)
+
+from scripts._helpers import configure_logging, mock_snakemake  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +48,8 @@ DEFAULT_N_VENTILES = 20
 
 
 def get_temporal_dh_balance(n, carrier_groups=None, subnodes_only=True):
-    """Return temporal DH energy balance (timesteps x carriers) in MW.
+    """
+    Return temporal DH energy balance (timesteps x carriers) in MW.
 
     Positive = supply, negative = demand/storage-charge.
     """
@@ -89,7 +95,8 @@ def get_electricity_price_t(n):
 
 
 def bin_by_price_ventile(balance, elec_price, n_bins):
-    """Group the DH balance by electricity price ventiles.
+    """
+    Group the DH balance by electricity price ventiles.
 
     Parameters
     ----------
@@ -142,7 +149,6 @@ def bin_by_price_ventile(balance, elec_price, n_bins):
     # Build tick labels: "< X" for each bin upper edge
     bin_labels = []
     for i in range(actual_n_bins):
-        lo = price_quantiles[i]
         hi = price_quantiles[min(i + 1, len(price_quantiles) - 1)]
         if i == actual_n_bins - 1:
             bin_labels.append(f"< {hi:.0f}")
@@ -158,7 +164,8 @@ def bin_by_price_ventile(balance, elec_price, n_bins):
 
 
 def plot_dh_ventiles(ax, shares, cumulative_twh, bin_labels, colors, title=""):
-    """Plot stacked-bar shares + cumulative heat generation.
+    """
+    Plot stacked-bar shares + cumulative heat generation.
 
     Parameters
     ----------
@@ -281,7 +288,7 @@ def main(snakemake):
     # Create figure
     fig, ax = plt.subplots(1, 1, figsize=(8, 5))
 
-    ax2 = plot_dh_ventiles(ax, shares, cumulative_twh, bin_labels, colors)
+    plot_dh_ventiles(ax, shares, cumulative_twh, bin_labels, colors)
 
     # Legend
     all_carriers = list(shares.columns)

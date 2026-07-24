@@ -28,18 +28,20 @@ matplotlib.use("Agg")
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import pandas as pd
-import pypsa
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts._helpers import configure_logging, mock_snakemake
-from scripts.sysgf_plot_helpers import (
+from scripts.sysgf_plot_helpers import (  # noqa: E402
     clean_label,
-    get_colors as _get_colors_base,
     process_networks,
 )
+from scripts.sysgf_plot_helpers import (  # noqa: E402
+    get_colors as _get_colors_base,
+)
+
+from scripts._helpers import configure_logging, mock_snakemake  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -190,8 +192,10 @@ def calc_average_dh_price(n):
 
 
 def aggregate_small_techs(costs_df, savings_df, threshold):
-    """Aggregate technologies below *threshold* (fraction of abs sum)
-    into 'other technologies'."""
+    """
+    Aggregate technologies below *threshold* (fraction of abs sum)
+    into 'other technologies'.
+    """
     significant = {"EU aggregated"}
     for _, row in savings_df.iterrows():
         abs_sum = row.abs().sum()
@@ -262,7 +266,8 @@ def create_plot(
     output_path,
     threshold=0.025,
 ):
-    """Create the two-panel system-cost impact figure.
+    """
+    Create the two-panel system-cost impact figure.
 
     Parameters
     ----------
