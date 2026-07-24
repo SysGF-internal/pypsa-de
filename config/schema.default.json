@@ -4280,7 +4280,7 @@
                       "type": "string"
                     }
                   ],
-                  "default": 90,
+                  "default": 90.0,
                   "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
                 },
                 "bottom_temperature": {
@@ -4293,7 +4293,7 @@
                       "type": "string"
                     }
                   ],
-                  "default": 35,
+                  "default": 35.0,
                   "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
                 },
                 "design_top_temperature": {
@@ -6503,7 +6503,7 @@
                   "type": "string"
                 }
               ],
-              "default": 90,
+              "default": 90.0,
               "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
             },
             "bottom_temperature": {
@@ -6516,7 +6516,7 @@
                   "type": "string"
                 }
               ],
-              "default": 35,
+              "default": 35.0,
               "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
             },
             "design_top_temperature": {
@@ -7711,7 +7711,7 @@
               "type": "string"
             }
           ],
-          "default": 90,
+          "default": 90.0,
           "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
         },
         "bottom_temperature": {
@@ -7724,7 +7724,7 @@
               "type": "string"
             }
           ],
-          "default": 35,
+          "default": 35.0,
           "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
         },
         "design_top_temperature": {
@@ -10968,7 +10968,7 @@
                       "type": "string"
                     }
                   ],
-                  "default": 90,
+                  "default": 90.0,
                   "description": "PTES top layer temperature in \u00b0C. When `top_temperature` falls below the nodal forward temperature, additional heating (boosting) is needed during discharge following a similar logic as for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature profile dynamically."
                 },
                 "bottom_temperature": {
@@ -10981,7 +10981,7 @@
                       "type": "string"
                     }
                   ],
-                  "default": 35,
+                  "default": 35.0,
                   "description": "PTES bottom layer temperature in \u00b0C. Can be set to 'return' to follow the return temperature profile dynamically."
                 },
                 "design_top_temperature": {

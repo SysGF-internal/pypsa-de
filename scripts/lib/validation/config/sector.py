@@ -76,14 +76,14 @@ class _PtesConfig(BaseModel):
         "heat source utilisation profiles in `build_heat_source_utilisation_profiles`.",
     )
     top_temperature: float | Literal["forward"] = Field(
-        90,
+        90.0,
         description="PTES top layer temperature in °C. When `top_temperature` falls below the nodal forward "
         "temperature, additional heating (boosting) is needed during discharge following a similar logic as "
         "for other heat sources. If set to 'forward', the PTES top temperature follows the forward temperature "
         "profile dynamically.",
     )
     bottom_temperature: float | Literal["return"] = Field(
-        35,
+        35.0,
         description="PTES bottom layer temperature in °C. Can be set to 'return' to follow the return "
         "temperature profile dynamically.",
     )
