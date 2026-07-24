@@ -566,9 +566,9 @@ def add_CCL_constraints(
         agg_p_nom_limits: data/agg_p_nom_minmax.csv
     """
 
-    assert (
-        planning_horizons is not None
-    ), "add_CCL_constraints are not implemented for perfect foresight, yet"
+    assert planning_horizons is not None, (
+        "add_CCL_constraints are not implemented for perfect foresight, yet"
+    )
 
     agg_p_nom_minmax = pd.read_csv(
         config["solving"]["agg_p_nom_limits"]["file"], index_col=[0, 1], header=[0, 1]
@@ -953,9 +953,7 @@ def add_TES_charger_ratio_constraints(
     charger_pattern = (
         "water tanks charger|water pits charger|aquifer thermal energy storage charger"
     )
-    discharger_pattern = (
-        "water tanks discharger|water pits discharger|aquifer thermal energy storage discharger"
-    )
+    discharger_pattern = "water tanks discharger|water pits discharger|aquifer thermal energy storage discharger"
     if not include_water_pits:
         charger_pattern = "water tanks charger|aquifer thermal energy storage charger"
         discharger_pattern = (
@@ -1007,6 +1005,17 @@ def add_TES_charger_ratio_constraints(
 def _has_layered_ptes(n: pypsa.Network) -> bool:
     """Return True if the network contains layered PTES stores."""
     return n.stores.index.str.contains("water pits layer").any()
+
+
+def _thermal_storage_constraints_enabled(config: dict) -> bool:
+    """Whether any thermal-storage technology needs shared TES constraints."""
+    sector = config["sector"]
+    district_heating = sector["district_heating"]
+    return bool(
+        sector["ttes"]
+        or district_heating["ptes"]["enable"]
+        or district_heating["ates"]["enable"]
+    )
 
 
 def add_layered_ptes_volume_capacity_constraint(
@@ -1457,7 +1466,7 @@ def extra_functionality(
 
     layered_ptes = _has_layered_ptes(n)
 
-    if n.config.get("sector", {}).get("ttes", False):
+    if _thermal_storage_constraints_enabled(config):
         if n.buses.index.str.contains(
             r"urban central heat|urban decentral heat|rural heat",
             case=False,
@@ -1466,9 +1475,7 @@ def extra_functionality(
             add_TES_energy_to_power_ratio_constraints(
                 n, include_water_pits=not layered_ptes
             )
-            add_TES_charger_ratio_constraints(
-                n, include_water_pits=not layered_ptes
-            )
+            add_TES_charger_ratio_constraints(n, include_water_pits=not layered_ptes)
 
     if layered_ptes:
         ptes_ds = xr.open_dataset(snakemake.input.ptes_operations)

@@ -64,6 +64,9 @@ class HeatSource(Enum):
         Ground/soil heat source (inexhaustible).
     PTES : str
         Pit Thermal Energy Storage discharge as heat source.
+    ATES : str
+        Aquifer Thermal Energy Storage discharge as heat source, modelled at a
+        constant top temperature and boosted to forward temperature by heat pumps.
 
     See Also
     --------
@@ -89,6 +92,7 @@ class HeatSource(Enum):
     PTES_LAYER_7 = "ptes layer 7"
     PTES_LAYER_8 = "ptes layer 8"
     PTES_LAYER_9 = "ptes layer 9"
+    ATES = "ates"
     # PTX excess heat sources
     ELECTROLYSIS_WASTE = "electrolysis_waste"
     FISCHER_TROPSCH_WASTE = "fischer_tropsch_waste"
@@ -138,10 +142,16 @@ class HeatSource(Enum):
             HeatSource.PTES_LAYER_7,
             HeatSource.PTES_LAYER_8,
             HeatSource.PTES_LAYER_9,
+            HeatSource.ATES,
         ]:
             return HeatSourceType.STORAGE
         else:
             return HeatSourceType.PROCESS_WASTE
+
+    @property
+    def is_ptes(self) -> bool:
+        """Whether this is the aggregate PTES source or one of its layers."""
+        return self == HeatSource.PTES or self.value.startswith("ptes layer ")
 
     @property
     def temperature_from_config(self) -> bool:
@@ -159,6 +169,10 @@ class HeatSource(Enum):
         """
         if self in [HeatSource.RIVER_WATER, HeatSource.LAKE_WATER]:
             return False
+        # ATES is modelled at a constant top temperature from config, so its
+        # temperature comes from heat_source_temperatures rather than a file.
+        if self == HeatSource.ATES:
+            return True
         return self.source_type in [
             HeatSourceType.SUPPLY_LIMITED,
             HeatSourceType.PROCESS_WASTE,
@@ -195,9 +209,9 @@ class HeatSource(Enum):
         Returns
         -------
         bool
-            True for PTES and GEOTHERMAL, False otherwise.
+            True for PTES, ATES and GEOTHERMAL, False otherwise.
         """
-        return self in [HeatSource.PTES, HeatSource.GEOTHERMAL]
+        return self in [HeatSource.PTES, HeatSource.ATES, HeatSource.GEOTHERMAL]
 
     def requires_generator(self) -> bool:
         """
@@ -351,10 +365,7 @@ class HeatSource(Enum):
         bool
             False for PTES with resistive boosting, True otherwise.
         """
-        if (
-            self.source_type == HeatSourceType.STORAGE
-            and ptes_discharge_resistive_boosting
-        ):
+        if self.is_ptes and ptes_discharge_resistive_boosting:
             logging.info(
                 "PTES configured with resistive boosting during discharge; "
                 "heat pump not built for PTES."

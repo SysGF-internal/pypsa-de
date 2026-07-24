@@ -153,6 +153,15 @@ def get_boosting_profile(
     )
 
 
+def generic_heat_sources(heat_sources: list[str], ptes_enable: bool) -> list[str]:
+    """Exclude only PTES sources handled by the dedicated storage pathway."""
+    return [
+        source
+        for source in heat_sources
+        if not (ptes_enable and HeatSource(source).is_ptes)
+    ]
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from scripts._helpers import mock_snakemake
@@ -169,11 +178,7 @@ if __name__ == "__main__":
 
     # PTES uses dedicated routing in prepare_sector_network and no longer
     # consumes the generic boosting profile pathway.
-    filtered_heat_sources = [
-        hs
-        for hs in heat_sources
-        if not (ptes_enable and HeatSource(hs).source_type == HeatSourceType.STORAGE)
-    ]
+    filtered_heat_sources = generic_heat_sources(heat_sources, ptes_enable)
 
     # Load PTES operations dataset if enabled
     if ptes_enable:

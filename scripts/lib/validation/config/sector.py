@@ -67,10 +67,6 @@ class _PtesConfig(BaseModel):
         "`e_nom_pu=(top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature)`. "
         "See `build_ptes_operations`.",
     )
-    charge_boosting_required: bool = Field(
-        False,
-        description="Deprecated. Not implemented.",
-    )
     discharge_resistive_boosting: bool = Field(
         False,
         description="If True, enables boosting by resistive heaters instead of heat pumps. "
@@ -135,6 +131,28 @@ class _PtesConfig(BaseModel):
         return self
 
 
+class _AtesConfig(BaseModel):
+    """Aquifer thermal energy storage (ATES) settings."""
+
+    enable: bool = Field(
+        False,
+        description="Enable gridded ATES potentials for urban central heating.",
+    )
+    data_file: str | None = Field(
+        None,
+        description="Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled.",
+    )
+    lifetime: float = Field(
+        20,
+        gt=0,
+        description="ATES technical lifetime in years.",
+    )
+    marginal_cost_charger: float = Field(
+        0.035,
+        description="Marginal cost of charging ATES in EUR/MWh.",
+    )
+
+
 class _DistrictHeatingConfig(ConfigModel):
     """Configuration for `sector.district_heating` settings."""
 
@@ -183,18 +201,8 @@ class _DistrictHeatingConfig(ConfigModel):
         default_factory=_PtesConfig,
         description="Pit thermal energy storage (PTES) settings.",
     )
-    ates: dict[str, Any] = Field(
-        default_factory=lambda: {
-            "enable": False,
-            "suitable_aquifer_types": ["Highly productive porous aquifers"],
-            "aquifer_volumetric_heat_capacity": 2600,
-            "fraction_of_aquifer_area_available": 0.2,
-            "effective_screen_length": 20,
-            "capex_as_fraction_of_geothermal_heat_source": 0.75,
-            "recovery_factor": 0.6,
-            "marginal_cost_charger": 0.035,
-            "ignore_missing_regions": False,
-        },
+    ates: _AtesConfig = Field(
+        default_factory=_AtesConfig,
         description="Aquifer thermal energy storage settings.",
     )
     heat_source_cooling: float = Field(
@@ -226,6 +234,7 @@ class _DistrictHeatingConfig(ConfigModel):
     heat_source_temperatures: dict[str, float] = Field(
         default_factory=lambda: {
             "geothermal": 65,
+            "ates": 90,
             "electrolysis_waste": 70,
             "fuel_cell_waste": 70,
             "fischer_tropsch_waste": 200,
@@ -1128,6 +1137,57 @@ class SectorConfig(BaseModel):
                     f"'{source.value}' is in heat_sources.urban central but "
                     f"'{option_key}' is 0 or unset. Either set it to a value "
                     f"in (0, 1] or remove '{source.value}' from heat_sources."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def validate_ptes_in_heat_sources(self):
+        """
+        Ensure ``ptes`` is listed in ``heat_sources.urban central`` when
+        ``district_heating.ptes.enable`` is true.
+
+        ``prepare_sector_network.add_heat`` only creates the PTES buses and the
+        discharge links to ``urban central heat`` when PTES appears in the heat
+        sources, so enabling PTES without listing it would silently drop it.
+        """
+        if self.district_heating.ptes.enable:
+            urban_central_sources = self.heat_sources.get(
+                HeatSystemType.URBAN_CENTRAL, []
+            )
+            if HeatSource.PTES not in urban_central_sources:
+                raise ValueError(
+                    "district_heating.ptes.enable is true but 'ptes' is not in "
+                    "heat_sources.urban central. Add 'ptes' to heat_sources.urban "
+                    "central or disable PTES."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def validate_ates_in_heat_sources(self):
+        """
+        Ensure ``ates`` is listed in ``heat_sources.urban central`` when
+        ``district_heating.ates.enable`` is true.
+
+        ``prepare_sector_network.add_heat`` builds the ATES discharge / boosting
+        links (heat pump from the ``ates heat`` resource bus to district heat)
+        only when ATES appears in the heat sources, so enabling ATES without
+        listing it would silently drop the discharge path.
+        """
+        if self.district_heating.ates.enable:
+            urban_central_sources = self.heat_sources.get(
+                HeatSystemType.URBAN_CENTRAL, []
+            )
+            if HeatSource.ATES not in urban_central_sources:
+                raise ValueError(
+                    "district_heating.ates.enable is true but 'ates' is not in "
+                    "heat_sources.urban central. Add 'ates' to heat_sources.urban "
+                    "central or disable ATES."
+                )
+            if not self.district_heating.ates.data_file:
+                raise ValueError(
+                    "district_heating.ates.enable is true but no ATES input file "
+                    "is configured. Set district_heating.ates.data_file to the "
+                    "licensed GeoPackage or disable ATES."
                 )
         return self
 

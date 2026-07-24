@@ -2443,7 +2443,7 @@
       "type": "string"
     },
     "HeatSource": {
-      "description": "Enumeration representing different heat sources for heat pumps and utilisation.\n\nHeat sources are categorized by their characteristics:\n\n**Inexhaustible sources** (AIR, GROUND, SEA_WATER):\n    Always available, no resource bus needed, heat pump draws from ambient.\n\n**Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, LAKE_WATER, PTES):\n    Have spatial/temporal constraints, require resource tracking via buses.\n    A utilisation link splits source heat into direct DH contribution\n    (fraction 1 \u2212 b) and HP input (fraction b), where b is the\n    boosting ratio from ``build_heat_source_utilisation_profiles``.\n\nAttributes\n----------\nGEOTHERMAL : str\n    Geothermal heat source with constant temperature.\nRIVER_WATER : str\n    River water heat source with time-varying temperature.\nSEA_WATER : str\n    Sea water heat source (treated as inexhaustible).\nLAKE_WATER : str\n    Lake water heat source (treated as inexhaustible).\nAIR : str\n    Ambient air heat source (inexhaustible).\nGROUND : str\n    Ground/soil heat source (inexhaustible).\nPTES : str\n    Pit Thermal Energy Storage discharge as heat source.\n\nSee Also\n--------\nHeatSystem : Defines heat system types (urban central, urban decentral, rural).\nbuild_heat_source_utilisation_profiles : Calculates boosting ratio profiles for heat sources.\nbuild_cop_profiles : Calculates COP profiles for heat pumps using these sources.",
+      "description": "Enumeration representing different heat sources for heat pumps and utilisation.\n\nHeat sources are categorized by their characteristics:\n\n**Inexhaustible sources** (AIR, GROUND, SEA_WATER):\n    Always available, no resource bus needed, heat pump draws from ambient.\n\n**Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, LAKE_WATER, PTES):\n    Have spatial/temporal constraints, require resource tracking via buses.\n    A utilisation link splits source heat into direct DH contribution\n    (fraction 1 \u2212 b) and HP input (fraction b), where b is the\n    boosting ratio from ``build_heat_source_utilisation_profiles``.\n\nAttributes\n----------\nGEOTHERMAL : str\n    Geothermal heat source with constant temperature.\nRIVER_WATER : str\n    River water heat source with time-varying temperature.\nSEA_WATER : str\n    Sea water heat source (treated as inexhaustible).\nLAKE_WATER : str\n    Lake water heat source (treated as inexhaustible).\nAIR : str\n    Ambient air heat source (inexhaustible).\nGROUND : str\n    Ground/soil heat source (inexhaustible).\nPTES : str\n    Pit Thermal Energy Storage discharge as heat source.\nATES : str\n    Aquifer Thermal Energy Storage discharge as heat source, modelled at a\n    constant top temperature and boosted to forward temperature by heat pumps.\n\nSee Also\n--------\nHeatSystem : Defines heat system types (urban central, urban decentral, rural).\nbuild_heat_source_utilisation_profiles : Calculates boosting ratio profiles for heat sources.\nbuild_cop_profiles : Calculates COP profiles for heat pumps using these sources.",
       "enum": [
         "geothermal",
         "river_water",
@@ -2462,6 +2462,7 @@
         "ptes layer 7",
         "ptes layer 8",
         "ptes layer 9",
+        "ates",
         "electrolysis_waste",
         "fischer_tropsch_waste",
         "sabatier_waste",
@@ -4264,11 +4265,6 @@
                   "description": "If True, the energy capacity is scaled as `e_nom_pu=(top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature)`. See `build_ptes_operations`.",
                   "type": "boolean"
                 },
-                "charge_boosting_required": {
-                  "default": false,
-                  "description": "Deprecated. Not implemented.",
-                  "type": "boolean"
-                },
                 "discharge_resistive_boosting": {
                   "default": false,
                   "description": "If True, enables boosting by resistive heaters instead of heat pumps. `prepare_sector_network` then adds the links `<node> urban central water pits resistive booster` and `<node> urban central water pits resistive heater stand-alone` and reroutes heat generation from resistive heaters accordingly. The required boosting alpha is computed from the unified heat source utilisation profiles in `build_heat_source_utilisation_profiles`.",
@@ -4315,9 +4311,37 @@
               }
             },
             "ates": {
-              "additionalProperties": true,
-              "description": "Aquifer thermal energy storage settings.",
-              "type": "object"
+              "description": "Aquifer thermal energy storage (ATES) settings.",
+              "properties": {
+                "enable": {
+                  "default": false,
+                  "description": "Enable gridded ATES potentials for urban central heating.",
+                  "type": "boolean"
+                },
+                "data_file": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled."
+                },
+                "lifetime": {
+                  "default": 20,
+                  "description": "ATES technical lifetime in years.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "marginal_cost_charger": {
+                  "default": 0.035,
+                  "description": "Marginal cost of charging ATES in EUR/MWh.",
+                  "type": "number"
+                }
+              }
             },
             "heat_source_cooling": {
               "default": 6,
@@ -4394,7 +4418,7 @@
         "heat_sources": {
           "additionalProperties": {
             "items": {
-              "description": "Enumeration representing different heat sources for heat pumps and utilisation.\n\nHeat sources are categorized by their characteristics:\n\n**Inexhaustible sources** (AIR, GROUND, SEA_WATER):\n    Always available, no resource bus needed, heat pump draws from ambient.\n\n**Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, LAKE_WATER, PTES):\n    Have spatial/temporal constraints, require resource tracking via buses.\n    A utilisation link splits source heat into direct DH contribution\n    (fraction 1 \u2212 b) and HP input (fraction b), where b is the\n    boosting ratio from ``build_heat_source_utilisation_profiles``.\n\nAttributes\n----------\nGEOTHERMAL : str\n    Geothermal heat source with constant temperature.\nRIVER_WATER : str\n    River water heat source with time-varying temperature.\nSEA_WATER : str\n    Sea water heat source (treated as inexhaustible).\nLAKE_WATER : str\n    Lake water heat source (treated as inexhaustible).\nAIR : str\n    Ambient air heat source (inexhaustible).\nGROUND : str\n    Ground/soil heat source (inexhaustible).\nPTES : str\n    Pit Thermal Energy Storage discharge as heat source.\n\nSee Also\n--------\nHeatSystem : Defines heat system types (urban central, urban decentral, rural).\nbuild_heat_source_utilisation_profiles : Calculates boosting ratio profiles for heat sources.\nbuild_cop_profiles : Calculates COP profiles for heat pumps using these sources.",
+              "description": "Enumeration representing different heat sources for heat pumps and utilisation.\n\nHeat sources are categorized by their characteristics:\n\n**Inexhaustible sources** (AIR, GROUND, SEA_WATER):\n    Always available, no resource bus needed, heat pump draws from ambient.\n\n**Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, LAKE_WATER, PTES):\n    Have spatial/temporal constraints, require resource tracking via buses.\n    A utilisation link splits source heat into direct DH contribution\n    (fraction 1 \u2212 b) and HP input (fraction b), where b is the\n    boosting ratio from ``build_heat_source_utilisation_profiles``.\n\nAttributes\n----------\nGEOTHERMAL : str\n    Geothermal heat source with constant temperature.\nRIVER_WATER : str\n    River water heat source with time-varying temperature.\nSEA_WATER : str\n    Sea water heat source (treated as inexhaustible).\nLAKE_WATER : str\n    Lake water heat source (treated as inexhaustible).\nAIR : str\n    Ambient air heat source (inexhaustible).\nGROUND : str\n    Ground/soil heat source (inexhaustible).\nPTES : str\n    Pit Thermal Energy Storage discharge as heat source.\nATES : str\n    Aquifer Thermal Energy Storage discharge as heat source, modelled at a\n    constant top temperature and boosted to forward temperature by heat pumps.\n\nSee Also\n--------\nHeatSystem : Defines heat system types (urban central, urban decentral, rural).\nbuild_heat_source_utilisation_profiles : Calculates boosting ratio profiles for heat sources.\nbuild_cop_profiles : Calculates COP profiles for heat pumps using these sources.",
               "enum": [
                 "geothermal",
                 "river_water",
@@ -4413,6 +4437,7 @@
                 "ptes layer 7",
                 "ptes layer 8",
                 "ptes layer 9",
+                "ates",
                 "electrolysis_waste",
                 "fischer_tropsch_waste",
                 "sabatier_waste",
@@ -5942,6 +5967,39 @@
         }
       }
     },
+    "_AtesConfig": {
+      "description": "Aquifer thermal energy storage (ATES) settings.",
+      "properties": {
+        "enable": {
+          "default": false,
+          "description": "Enable gridded ATES potentials for urban central heating.",
+          "type": "boolean"
+        },
+        "data_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled."
+        },
+        "lifetime": {
+          "default": 20,
+          "description": "ATES technical lifetime in years.",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "marginal_cost_charger": {
+          "default": 0.035,
+          "description": "Marginal cost of charging ATES in EUR/MWh.",
+          "type": "number"
+        }
+      }
+    },
     "_AutarkyConfig": {
       "description": "Configuration for `electricity.autarky` settings.",
       "properties": {
@@ -6430,11 +6488,6 @@
               "description": "If True, the energy capacity is scaled as `e_nom_pu=(top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature)`. See `build_ptes_operations`.",
               "type": "boolean"
             },
-            "charge_boosting_required": {
-              "default": false,
-              "description": "Deprecated. Not implemented.",
-              "type": "boolean"
-            },
             "discharge_resistive_boosting": {
               "default": false,
               "description": "If True, enables boosting by resistive heaters instead of heat pumps. `prepare_sector_network` then adds the links `<node> urban central water pits resistive booster` and `<node> urban central water pits resistive heater stand-alone` and reroutes heat generation from resistive heaters accordingly. The required boosting alpha is computed from the unified heat source utilisation profiles in `build_heat_source_utilisation_profiles`.",
@@ -6481,9 +6534,37 @@
           }
         },
         "ates": {
-          "additionalProperties": true,
-          "description": "Aquifer thermal energy storage settings.",
-          "type": "object"
+          "description": "Aquifer thermal energy storage (ATES) settings.",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable gridded ATES potentials for urban central heating.",
+              "type": "boolean"
+            },
+            "data_file": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled."
+            },
+            "lifetime": {
+              "default": 20,
+              "description": "ATES technical lifetime in years.",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "marginal_cost_charger": {
+              "default": 0.035,
+              "description": "Marginal cost of charging ATES in EUR/MWh.",
+              "type": "number"
+            }
+          }
         },
         "heat_source_cooling": {
           "default": 6,
@@ -7613,11 +7694,6 @@
         "temperature_dependent_capacity": {
           "default": false,
           "description": "If True, the energy capacity is scaled as `e_nom_pu=(top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature)`. See `build_ptes_operations`.",
-          "type": "boolean"
-        },
-        "charge_boosting_required": {
-          "default": false,
-          "description": "Deprecated. Not implemented.",
           "type": "boolean"
         },
         "discharge_resistive_boosting": {
@@ -10877,11 +10953,6 @@
                   "description": "If True, the energy capacity is scaled as `e_nom_pu=(top_temperature - bottom_temperature) / (design_top_temperature - design_bottom_temperature)`. See `build_ptes_operations`.",
                   "type": "boolean"
                 },
-                "charge_boosting_required": {
-                  "default": false,
-                  "description": "Deprecated. Not implemented.",
-                  "type": "boolean"
-                },
                 "discharge_resistive_boosting": {
                   "default": false,
                   "description": "If True, enables boosting by resistive heaters instead of heat pumps. `prepare_sector_network` then adds the links `<node> urban central water pits resistive booster` and `<node> urban central water pits resistive heater stand-alone` and reroutes heat generation from resistive heaters accordingly. The required boosting alpha is computed from the unified heat source utilisation profiles in `build_heat_source_utilisation_profiles`.",
@@ -10928,9 +10999,37 @@
               }
             },
             "ates": {
-              "additionalProperties": true,
-              "description": "Aquifer thermal energy storage settings.",
-              "type": "object"
+              "description": "Aquifer thermal energy storage (ATES) settings.",
+              "properties": {
+                "enable": {
+                  "default": false,
+                  "description": "Enable gridded ATES potentials for urban central heating.",
+                  "type": "boolean"
+                },
+                "data_file": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled."
+                },
+                "lifetime": {
+                  "default": 20,
+                  "description": "ATES technical lifetime in years.",
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "marginal_cost_charger": {
+                  "default": 0.035,
+                  "description": "Marginal cost of charging ATES in EUR/MWh.",
+                  "type": "number"
+                }
+              }
             },
             "heat_source_cooling": {
               "default": 6,
@@ -11007,7 +11106,7 @@
         "heat_sources": {
           "additionalProperties": {
             "items": {
-              "description": "Enumeration representing different heat sources for heat pumps and utilisation.\n\nHeat sources are categorized by their characteristics:\n\n**Inexhaustible sources** (AIR, GROUND, SEA_WATER):\n    Always available, no resource bus needed, heat pump draws from ambient.\n\n**Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, LAKE_WATER, PTES):\n    Have spatial/temporal constraints, require resource tracking via buses.\n    A utilisation link splits source heat into direct DH contribution\n    (fraction 1 \u2212 b) and HP input (fraction b), where b is the\n    boosting ratio from ``build_heat_source_utilisation_profiles``.\n\nAttributes\n----------\nGEOTHERMAL : str\n    Geothermal heat source with constant temperature.\nRIVER_WATER : str\n    River water heat source with time-varying temperature.\nSEA_WATER : str\n    Sea water heat source (treated as inexhaustible).\nLAKE_WATER : str\n    Lake water heat source (treated as inexhaustible).\nAIR : str\n    Ambient air heat source (inexhaustible).\nGROUND : str\n    Ground/soil heat source (inexhaustible).\nPTES : str\n    Pit Thermal Energy Storage discharge as heat source.\n\nSee Also\n--------\nHeatSystem : Defines heat system types (urban central, urban decentral, rural).\nbuild_heat_source_utilisation_profiles : Calculates boosting ratio profiles for heat sources.\nbuild_cop_profiles : Calculates COP profiles for heat pumps using these sources.",
+              "description": "Enumeration representing different heat sources for heat pumps and utilisation.\n\nHeat sources are categorized by their characteristics:\n\n**Inexhaustible sources** (AIR, GROUND, SEA_WATER):\n    Always available, no resource bus needed, heat pump draws from ambient.\n\n**Limited sources requiring a bus** (GEOTHERMAL, RIVER_WATER, LAKE_WATER, PTES):\n    Have spatial/temporal constraints, require resource tracking via buses.\n    A utilisation link splits source heat into direct DH contribution\n    (fraction 1 \u2212 b) and HP input (fraction b), where b is the\n    boosting ratio from ``build_heat_source_utilisation_profiles``.\n\nAttributes\n----------\nGEOTHERMAL : str\n    Geothermal heat source with constant temperature.\nRIVER_WATER : str\n    River water heat source with time-varying temperature.\nSEA_WATER : str\n    Sea water heat source (treated as inexhaustible).\nLAKE_WATER : str\n    Lake water heat source (treated as inexhaustible).\nAIR : str\n    Ambient air heat source (inexhaustible).\nGROUND : str\n    Ground/soil heat source (inexhaustible).\nPTES : str\n    Pit Thermal Energy Storage discharge as heat source.\nATES : str\n    Aquifer Thermal Energy Storage discharge as heat source, modelled at a\n    constant top temperature and boosted to forward temperature by heat pumps.\n\nSee Also\n--------\nHeatSystem : Defines heat system types (urban central, urban decentral, rural).\nbuild_heat_source_utilisation_profiles : Calculates boosting ratio profiles for heat sources.\nbuild_cop_profiles : Calculates COP profiles for heat pumps using these sources.",
               "enum": [
                 "geothermal",
                 "river_water",
@@ -11026,6 +11125,7 @@
                 "ptes layer 7",
                 "ptes layer 8",
                 "ptes layer 9",
+                "ates",
                 "electrolysis_waste",
                 "fischer_tropsch_waste",
                 "sabatier_waste",

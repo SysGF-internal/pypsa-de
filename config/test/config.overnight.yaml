@@ -83,7 +83,7 @@ sector:
         enable: true
         booster_heat_pump: true
     ates:
-      enable: true
+      enable: false
   heat_sources:
     urban central:
     - air
