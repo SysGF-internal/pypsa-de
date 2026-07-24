@@ -83,10 +83,18 @@ pixi run pytest test \
 pixi run snakemake --list-rules --cores 1
 pixi run snakemake --list-rules --cores 1 \
   --configfile config/examples/config.ates_hi_grid.yaml
+pixi run snakemake -n --cores 1 \
+  --configfile config/test/config.integration_dag.yaml
 ```
 
 `test_base_network.py` and `test_build_shapes.py` download Natural Earth data;
 run the complete `pixi run pytest test` in a connected environment.
+
+The committed integration DAG config deliberately disables Ariadne scenario
+management. The normal DE default first requires a valid generated
+`config/scenarios.automated.yaml`; without it, the default DAG cannot resolve
+`KN2045_Mix`. Treat generation of that file and its external IIASA inputs as a
+production-run prerequisite rather than a code integration check.
 
 For workflow promotion, run the existing small DE build and the PTES feature
 matrix, then add one BGR-ATES and one licensed HI-grid-ATES scenario. Record
