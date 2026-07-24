@@ -56,8 +56,20 @@ sector:
 
 See `config/examples/config.ates_hi_grid.yaml`. The licensed file is not stored
 in Git. It must contain `CAPEX_EUR_MW`, `VERLUSTRATE`, and geometry. The
-handover interprets `VERLUSTRATE` as annual retained energy; confirm this with
-HI before using results in research.
+provider confirmed inverse-CAPEX regional weighting and the conversion
+`standing_loss = 1 - VERLUSTRATE ** (1 / 8760)`. The supplied dummy GeoPackage
+has 353,152 valid EPSG:25832 cells and is suitable for schema/performance smoke
+tests; its constant values do not test spatial variation.
+
+## District-heating subnode selection
+
+`sector.district_heating.subnodes.countries` limits the countries in which
+explicit subnodes are attached. If `demand_share` is set, the code first applies
+that country filter and then selects the largest systems until the configured
+share of model-aware DH demand *inside that subset* is covered. A regression
+test with a much larger excluded-country demand protects this denominator
+ordering. The older `dh-subnodes` branch can therefore be archived once this
+integration line is published.
 
 ## Test ladder
 
@@ -82,7 +94,8 @@ config, commit, solver, objective and output-network path.
 
 ## Data and workflow gates
 
-- Licensed HI data and the meaning of `VERLUSTRATE`.
+- Production approval for the licensed HI dataset; the dummy file is not
+  research input.
 - Local census-area input when census-based DH geometry refinement is enabled.
 - Copernicus Marine credentials for seawater retrieval.
 - External downloads and a solver for full end-to-end builds.

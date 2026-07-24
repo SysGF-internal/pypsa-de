@@ -60,9 +60,9 @@ def annual_retention_to_hourly_standing_loss(
     """
     Convert an annual retained-energy fraction to hourly self-discharge.
 
-    The interpretation of the HI source column ``VERLUSTRATE`` must be
-    confirmed with the data provider before production use. The handover
-    implementation treats it as a retention factor rather than a lost-energy
+    The HI data provider confirmed that ``VERLUSTRATE`` is to be converted by
+    taking its 8760th root. It is therefore used here as the annually retained
+    energy fraction; PyPSA's ``standing_loss`` is one minus the hourly retained
     fraction.
     """
     return 1 - annual_retention ** (1 / HOURS_PER_YEAR)
