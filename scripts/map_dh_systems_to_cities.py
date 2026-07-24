@@ -25,9 +25,9 @@ Notes
 """
 
 import logging
+import math
 from pathlib import Path
 
-import math
 import geopandas as gpd
 import pandas as pd
 
@@ -226,4 +226,6 @@ def main(snakemake):
 
 
 if __name__ == "__main__":
-    main(snakemake)  # type: ignore[name-defined]
+    if "snakemake" not in globals():
+        raise RuntimeError("This script must be run through its Snakemake rule.")
+    main(globals()["snakemake"])

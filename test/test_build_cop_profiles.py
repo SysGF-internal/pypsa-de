@@ -1,11 +1,3 @@
-from pathlib import Path
-import sys
-
-
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 from scripts.build_cop_profiles.run import expand_heat_sources_for_ptes_layers
 
 

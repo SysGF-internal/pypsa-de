@@ -218,11 +218,8 @@ def extend_district_heat_share(
                 f"exceeds cluster's district heating demand ({cluster_dh_demand_mwh / 1e6:.3f} TWh). "
                 f"Scaling subnode demands by {scale_factor:.2%}. Parent node demand set to zero."
             )
-            # After scaling, all district heating demand goes to subnodes
-            remaining_cluster_demand_mwh = 0.0
         else:
             scale_factor = 1.0
-            remaining_cluster_demand_mwh = cluster_dh_demand_mwh - total_subnode_demand
 
         # Track how much of the cluster's total heat is shifted to subnodes (fraction of useful heat incl. losses)
         total_subnode_share = 0.0
