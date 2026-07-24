@@ -17,23 +17,28 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from matplotlib.collections import LineCollection
-from matplotlib.lines import Line2D
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
+from matplotlib.collections import LineCollection
+from matplotlib.lines import Line2D
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts._helpers import configure_logging, mock_snakemake
-from scripts.sysgf_plot_helpers import apply_carrier_groups, clean_label
+from scripts.sysgf_plot_helpers import (  # noqa: E402
+    apply_carrier_groups,
+    clean_label,
+)
+
+from scripts._helpers import configure_logging, mock_snakemake  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +59,8 @@ DEFAULT_EXAMPLE_WEEKS = {
 
 
 def get_temporal_dh_balance(n, carrier_groups=None, subnodes_only=True):
-    """Return temporal DH energy balance (timesteps x carriers) in MW.
+    """
+    Return temporal DH energy balance (timesteps x carriers) in MW.
 
     Positive = supply, negative = demand/storage-charge.
     """
@@ -127,7 +133,8 @@ def _colored_line(ax, x, y, c, cmap, norm, lw=2.5):
 
 def plot_dh_balance_week(ax, balance, elec_price, ff_temp, colors, norm,
                          ylabel=True, price_label=True):
-    """Plot one week of DH balance as stacked area + coloured price line.
+    """
+    Plot one week of DH balance as stacked area + coloured price line.
 
     Parameters
     ----------
@@ -311,14 +318,30 @@ def main(snakemake):
     norm = mcolors.Normalize(vmin=temp_min, vmax=temp_max)
 
     logger.info("Plotting winter week")
-    lc_w = plot_dh_balance_week(ax_w, bal_winter, price_winter, temp_winter, colors, norm,
-                                ylabel=True, price_label=False)
+    plot_dh_balance_week(
+        ax_w,
+        bal_winter,
+        price_winter,
+        temp_winter,
+        colors,
+        norm,
+        ylabel=True,
+        price_label=False,
+    )
     ax_w.set_ylim(*ylim)
     ax_w.set_title(f"{winter_start:%b %d}\u2013{winter_end:%b %d}", fontsize=12)
 
     logger.info("Plotting summer week")
-    lc_s = plot_dh_balance_week(ax_s, bal_summer, price_summer, temp_summer, colors, norm,
-                                ylabel=False, price_label=True)
+    plot_dh_balance_week(
+        ax_s,
+        bal_summer,
+        price_summer,
+        temp_summer,
+        colors,
+        norm,
+        ylabel=False,
+        price_label=True,
+    )
     ax_s.set_ylim(*ylim)
     ax_s.set_title(f"{summer_start:%b %d}\u2013{summer_end:%b %d}", fontsize=12)
 

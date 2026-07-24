@@ -10,29 +10,27 @@ for PyPSA networks across different scenarios.
 
 import logging
 import os
-import re
 import sys
 
 sys.path.append(os.getcwd())
 
 import matplotlib
-from matplotlib.legend_handler import HandlerPatch
 import matplotlib.patches as mpatches
+from matplotlib.legend_handler import HandlerPatch
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
-import pypsa
-
-from scripts._helpers import configure_logging, mock_snakemake
+from matplotlib.lines import Line2D
 from scripts.sysgf_plot_helpers import (
     apply_carrier_groups,
     clean_label,
     get_colors,
     process_networks,
 )
+
+from scripts._helpers import configure_logging, mock_snakemake
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +159,8 @@ class HandlerSquare(HandlerPatch):
 
 
 def calc_dh_price_range_subnodes(n, subnodes_only=True):
-    """Return demand-weighted district heating price per system.
+    """
+    Return demand-weighted district heating price per system.
 
     Parameters
     ----------
@@ -203,7 +202,8 @@ def calc_dh_price_range_subnodes(n, subnodes_only=True):
 
 
 def calc_dh_demand_twh(network, systems, subnodes_only=True):
-    """Return annual district heating demand in TWh for each system.
+    """
+    Return annual district heating demand in TWh for each system.
 
     Parameters
     ----------
@@ -258,7 +258,8 @@ def prepare_energy_balance_data(
     drop_losses=False,
     subnodes_only=True,
 ):
-    """Prepare relative (%) DH energy balance data for a single network.
+    """
+    Prepare relative (%) DH energy balance data for a single network.
 
     Parameters
     ----------
@@ -329,7 +330,8 @@ def prepare_energy_balance_data(
 
 
 def get_absolute_energy_balance(network, subnodes_only=False, carrier_groups=None):
-    """Return supply-side DH energy balance in TWh across all systems.
+    """
+    Return supply-side DH energy balance in TWh across all systems.
 
     Parameters
     ----------
@@ -418,7 +420,8 @@ def plot_energy_balance_comparison(
     drop_losses=False,
     subnodes_only=True,
 ):
-    """Plot side-by-side DH energy balance comparison for two scenarios.
+    """
+    Plot side-by-side DH energy balance comparison for two scenarios.
 
     Produces a PDF with:
     - Top row  : horizontal stacked bar charts (supply/demand as % of demand).

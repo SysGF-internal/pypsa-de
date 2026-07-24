@@ -19,7 +19,6 @@ import pypsa
 
 from scripts._helpers import configure_logging, mock_snakemake
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -134,7 +133,7 @@ def calc_curtailment_de(n):
             .sum()
         )
         return curtailment
-    except:
+    except Exception:
         return 0
 
 
@@ -148,7 +147,7 @@ def calc_vres_gen_de(n):
             .sum()
         )
         return gen
-    except:
+    except Exception:
         return 0
 
 
@@ -160,7 +159,7 @@ def calc_heat_venting_de(n):
             @ n.generators_t.p.filter(regex=r"DE0.*heat vent")
         ).sum() / 1e6
         return heat_venting
-    except:
+    except Exception:
         return 0
 
 
@@ -453,11 +452,6 @@ def create_summary_df(networks):
                             ),
                             "onwind_capacity_GW": n.generators.filter(
                                 regex=r"DE.*onwind", axis=0
-                            )
-                            .p_nom_opt.div(1e3)
-                            .sum(),
-                            "solar_capacity_GW": n.generators.filter(
-                                regex=r"DE.*solar", axis=0
                             )
                             .p_nom_opt.div(1e3)
                             .sum(),
