@@ -32,11 +32,13 @@ class SeaWaterHeatApproximator(SurfaceWaterHeatApproximator):
         region: shapely.geometry.polygon.Polygon | gpd.GeoSeries,
         min_inlet_temperature: float = 1,
     ) -> None:
-        # buffer the region geometry by half the data resolution
-        # This way, offshore data points just outside the region are included
+        # Buffer the region boundary by a fraction of one pixel so that offshore
+        # data points just outside the region are included. The region is in
+        # EPSG:4326, so the buffer distance must be in degrees (the data/geometry
+        # CRS units) -> use _data_resolution_degrees (one pixel in degrees).
         self.water_temperature = water_temperature
         self.region_geometry = region.geometry.boundary.buffer(
-            self._data_resolution / 1.5
+            self._data_resolution_degrees / 1.5
         )
         self.min_outlet_temperature = min_inlet_temperature
 
@@ -97,7 +99,7 @@ class SeaWaterHeatApproximator(SurfaceWaterHeatApproximator):
             Dataset containing average_temperature
         """
         average_water_temperature = self._water_temperature_in_region.mean(
-            dim=["x", "y"], skipna=True
+            dim=["longitude", "latitude"], skipna=True
         )
 
         # Combine into a single dataset and apply cut-off temperature

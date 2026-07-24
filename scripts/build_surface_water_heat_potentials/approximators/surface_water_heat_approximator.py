@@ -7,6 +7,7 @@ from functools import cached_property
 
 import geopandas as gpd
 import numpy as np
+import rioxarray  # noqa: F401  # register the xarray ``.rio`` accessor
 import shapely
 import xarray as xr
 
@@ -26,7 +27,7 @@ class SurfaceWaterHeatApproximator(ABC):
     """
 
     TIME = "time"
-    EPSG = 3035
+    EPSG = 4326
 
     def __init__(
         self,
@@ -86,7 +87,7 @@ class SurfaceWaterHeatApproximator(ABC):
         # Calculate power-weighted average temperature using cached sum
         average_water_temperature = (
             self._water_temperature_in_region * self._power_in_region
-        ).sum(dim=["x", "y"]) / (self._power_sum_spatial + 0.001)
+        ).sum(dim=["longitude", "latitude"]) / (self._power_sum_spatial + 0.001)
 
         # Combine into a single dataset
         return xr.Dataset(
@@ -169,8 +170,8 @@ class SurfaceWaterHeatApproximator(ABC):
                 f"volume_flow has {self.volume_flow.dims}"
             )
 
-        # Check that x and y coordinates match
-        for coord in ["x", "y", self.TIME]:
+        # Check that longitude and latitude coordinates match
+        for coord in ["longitude", "latitude", self.TIME]:
             if (
                 coord in self.water_temperature.coords
                 and coord in self.volume_flow.coords
@@ -196,7 +197,7 @@ class SurfaceWaterHeatApproximator(ABC):
         xr.DataArray
             Volume flow data clipped to region
         """
-        return self.volume_flow.rio.clip(self.region.geometry, drop=False)
+        return self.volume_flow.rio.clip(self.region.geometry, drop=True)
 
     @cached_property
     def _water_temperature_in_region(self) -> xr.DataArray:
@@ -208,24 +209,68 @@ class SurfaceWaterHeatApproximator(ABC):
         xr.DataArray
             Water temperature data clipped to region
         """
-        return self.water_temperature.rio.clip(self.region.geometry, drop=False)
+        return self.water_temperature.rio.clip(self.region.geometry, drop=True)
 
     @cached_property
-    def _data_resolution(self) -> float:
+    def _data_resolution_degrees(self) -> float:
         """
-        Cache resolution calculation based on dataset resolution.
-        Assumes data is in EPSG:3035 (meters).
-        """
-        # Get resolution directly from rio
-        x_res, y_res = self.water_temperature.rio.resolution()
+        Average pixel spacing of the data grid, in degrees.
 
-        # Average resolution in meters (EPSG:3035 uses meters)
-        return (abs(x_res) + abs(y_res)) / 2
+        The data is on a geographic (EPSG:4326) grid, so ``rio.resolution()``
+        returns the pixel spacing in degrees. The grid is angularly square (equal
+        degree spacing in longitude and latitude); the two axis values are averaged
+        for robustness. Use this where a length in the data's own CRS is needed,
+        e.g. buffering geometries that are themselves in EPSG:4326.
+
+        Returns
+        -------
+        float
+            Average pixel spacing in degrees.
+        """
+        x_res_deg, y_res_deg = self.water_temperature.rio.resolution()
+        return (abs(x_res_deg) + abs(y_res_deg)) / 2
+
+    @cached_property
+    def _data_resolution_meters(self) -> float:
+        """
+        Effective linear pixel resolution of the data grid, in meters.
+
+        The grid is angularly square but anisotropic on the ground: a degree of
+        longitude spans ``cos(latitude)`` times the ground distance of a degree of
+        latitude. Converting each axis separately (longitude foreshortened by
+        ``cos(latitude)``, latitude unscaled) and taking the geometric mean — the
+        side length of a square pixel with the same ground area — reduces, for a
+        square angular grid, to ``_data_resolution_degrees * meters_per_degree *
+        sqrt(cos(latitude))``. The latitude used is the grid's mean latitude
+        (effectively constant over a single region).
+
+        This value feeds ``_scaling_factor`` (``_data_resolution_meters /
+        min_distance_meters``), which thins the per-pixel power sum so that heat
+        extraction is not double-counted within ``min_distance_meters`` along a
+        river.
+
+        Returns
+        -------
+        float
+            Isotropic-equivalent pixel resolution in meters.
+        """
+        # Region-representative latitude; ~constant within one region.
+        lat = float(self.water_temperature.latitude.mean())
+
+        # Rough degrees->meters (1 arcmin ~ 1852 m, 1 deg = 60 arcmin).
+        meters_per_degree = 60 * 1852
+
+        # Geometric mean of the anisotropic ground pixel, for a square angular grid.
+        return (
+            self._data_resolution_degrees
+            * meters_per_degree
+            * float(np.sqrt(np.cos(np.radians(lat))))
+        )
 
     @cached_property
     def _scaling_factor(self) -> float:
         """Cache scaling factor calculation."""
-        return self._data_resolution / self.min_distance_meters
+        return self._data_resolution_meters / self.min_distance_meters
 
     @cached_property
     def _power_in_region(self) -> xr.DataArray:
@@ -264,7 +309,7 @@ class SurfaceWaterHeatApproximator(ABC):
         xr.DataArray
             Spatial sum of power over x and y dimensions
         """
-        return self._power_in_region.sum(dim=["x", "y"])
+        return self._power_in_region.sum(dim=["longitude", "latitude"])
 
     @cached_property
     def _power_sum_temporal(self) -> xr.DataArray:

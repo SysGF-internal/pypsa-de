@@ -53,7 +53,7 @@ class RiverWaterHeatApproximator(SurfaceWaterHeatApproximator):
 
     @staticmethod
     def _round_coordinates(
-        da: xr.DataArray, decimal_precision: int = 4
+        da: xr.DataArray, decimal_precision: int = 8
     ) -> xr.DataArray:
         """
         Round the coordinates of the HERA dataset to the defined precision.
@@ -68,13 +68,14 @@ class RiverWaterHeatApproximator(SurfaceWaterHeatApproximator):
         xr.DataArray
             HERA dataset with rounded coordinates.
         """
-        if "x" in da.coords and "y" in da.coords:
+        if "longitude" in da.coords and "latitude" in da.coords:
             return da.assign_coords(
-                x=da.x.round(decimal_precision), y=da.y.round(decimal_precision)
+                longitude=da.longitude.round(decimal_precision),
+                latitude=da.latitude.round(decimal_precision),
             )
         else:
             raise ValueError(
-                "The DataArray does not contain the expected coordinates 'x' and 'y'."
+                "The DataArray does not contain the expected coordinates 'longitude' and 'latitude'."
             )
 
     @staticmethod
