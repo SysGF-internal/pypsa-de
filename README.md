@@ -28,20 +28,72 @@ If you cannot access pixi on your machine, you can also install using `conda`. F
 
 ### Copernicus Marine credentials
 
-Retrieving sea water temperature data requires a free [Copernicus Marine Service](https://marine.copernicus.eu/) account. Set your credentials as environment variables before running the workflow (e.g. in `~/.bashrc`):
+Retrieving sea water temperature data from the primary source requires a free
+[Copernicus Marine Service](https://marine.copernicus.eu/) account. The
+workflow reads the credentials from the following environment variables:
 
 ```bash
-export COPERNICUSMARINE_USERNAME=your_username
-export COPERNICUSMARINE_PASSWORD=your_password
+export COPERNICUSMARINE_USERNAME="your_username"
+export COPERNICUSMARINE_PASSWORD="your_password"
 ```
+
+The exports may be placed in `~/.bashrc` for interactive Bash sessions. After
+editing it, start a new shell or run `source ~/.bashrc`.
+
+Alternatively, create an untracked `.env` file in the repository root:
+
+```dotenv
+COPERNICUSMARINE_USERNAME=your_username
+COPERNICUSMARINE_PASSWORD=your_password
+```
+
+The Snakefile loads this file automatically. `.env` is ignored by Git; never
+put credentials into a tracked YAML configuration. Both variables must be set
+together. They are only needed when
+`data.seawater_temperature.source: primary`; the default archived dataset does
+not require a Copernicus login.
 
 ## Run the analysis
 
-Before running any analysis with scenarios, the rule `build_scenarios` must be executed. This will create the file `config/scenarios.automated.yaml` which includes input data and CO2 targets from the IIASA Ariadne database as well as the specifications from the manual scenario file. [This file is specified in the  config.de.yaml via they key `run:scenarios:manual_file` and located at `config/scenarios.manual.yaml` by default].
+### Generate the configured scenarios
 
-    snakemake -c1 build_scenarios
+Whenever scenarios are newly configured or their definitions are changed,
+force the PyPSA-DE `build_scenarios` rule before running the model:
 
-Note that the hierarchy of scenario files is the following: `scenarios.automated.yaml` > (any `explicitly specified --configfiles`) > `config.de.yaml `> `config.default.yaml `Changes in the file `scenarios.manual.yaml `are only taken into account if the rule `build_scenarios` is executed.
+```bash
+pixi run snakemake --cores 1 --force build_scenarios
+```
+
+This is the production scenario-generation entry point for PyPSA-DE. It
+combines the scenarios listed under `run.name`, the manually maintained file
+at `run.scenarios.manual_file`, and demand and target data from the configured
+Ariadne/IIASA database. It writes the generated file to
+`run.scenarios.file`. With `config/config.de.yaml`, these paths are:
+
+- input: `config/scenarios.manual.yaml`
+- output: `config/scenarios.automated.yaml`
+
+For a study-specific configuration, use the same config file for scenario
+generation and the subsequent workflow, for example:
+
+```bash
+pixi run snakemake --cores 1 \
+  --configfile config/config.showcase.yaml \
+  --force build_scenarios
+pixi run snakemake --cores all \
+  --configfile config/config.showcase.yaml
+```
+
+The generated scenario file has the highest scenario-specific precedence,
+followed by explicitly supplied config files, `config/config.de.yaml`, and
+`config/config.default.yaml`. The generic PyPSA-Eur `create_scenarios` template
+is not a DE production rule and does not add Ariadne/IIASA data.
+
+Do not edit an automated scenario file as the source of truth: update the
+configured manual scenario file or `run.name`, then rerun
+`build_scenarios --force`.
+
+### Run the workflow
 
 To run the analysis use, either
 

@@ -26,7 +26,7 @@
 # Scenario definitions: config/scenarios.showcase.yaml
 #
 # Usage:
-#   pixi run snakemake --configfile=config/config.showcase.yaml build_scenarios
+#   pixi run snakemake --configfile=config/config.showcase.yaml -f build_scenarios
 #   pixi run snakemake --profile slurm --configfile=config/config.showcase.yaml evaluate_ptes_feature_matrix
 
 run:
