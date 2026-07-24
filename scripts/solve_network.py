@@ -126,8 +126,10 @@ def add_land_use_constraint_perfect(n: pypsa.Network) -> None:
     # adjust name to fit syntax of nominal constraint per bus
     df = p_nom_max.reset_index()
     df["name"] = df.apply(
-        lambda row: f"nom_max_{row['carrier']}"
-        + (f"_{row['build_year']}" if row["build_year"] is not None else ""),
+        lambda row: (
+            f"nom_max_{row['carrier']}"
+            + (f"_{row['build_year']}" if row["build_year"] is not None else "")
+        ),
         axis=1,
     )
 
@@ -564,9 +566,9 @@ def add_CCL_constraints(
         agg_p_nom_limits: data/agg_p_nom_minmax.csv
     """
 
-    assert planning_horizons is not None, (
-        "add_CCL_constraints are not implemented for perfect foresight, yet"
-    )
+    assert (
+        planning_horizons is not None
+    ), "add_CCL_constraints are not implemented for perfect foresight, yet"
 
     agg_p_nom_minmax = pd.read_csv(
         config["solving"]["agg_p_nom_limits"]["file"], index_col=[0, 1], header=[0, 1]
@@ -853,7 +855,9 @@ def add_operational_reserve_margin(n, sns, config):
     n.model.add_constraints(lhs <= rhs, name="Generator-p-reserve-upper")
 
 
-def add_TES_energy_to_power_ratio_constraints(n: pypsa.Network) -> None:
+def add_TES_energy_to_power_ratio_constraints(
+    n: pypsa.Network, include_water_pits: bool = True
+) -> None:
     """
     Add TES constraints to the network.
 
@@ -872,12 +876,20 @@ def add_TES_energy_to_power_ratio_constraints(n: pypsa.Network) -> None:
     RuntimeError
         If the TES storage and charger indices do not align.
     """
+    charger_pattern = "water tanks charger|water pits charger"
+    store_pattern = "water tanks|water pits"
+    if not include_water_pits:
+        charger_pattern = "water tanks charger"
+        store_pattern = "water tanks"
+
     indices_charger_p_nom_extendable = n.links.index[
-        n.links.index.str.contains("water tanks charger|water pits charger")
+        n.links.index.str.contains(charger_pattern)
+        & ~n.links.index.str.contains("layer")
         & n.links.p_nom_extendable
     ]
     indices_stores_e_nom_extendable = n.stores.index[
-        n.stores.index.str.contains("water tanks|water pits")
+        n.stores.index.str.contains(store_pattern)
+        & ~n.stores.index.str.contains("layer")
         & n.stores.e_nom_extendable
     ]
 
@@ -917,7 +929,9 @@ def add_TES_energy_to_power_ratio_constraints(n: pypsa.Network) -> None:
     n.model.add_constraints(merged_expr == 0, name="TES_energy_to_power_ratio")
 
 
-def add_TES_charger_ratio_constraints(n: pypsa.Network) -> None:
+def add_TES_charger_ratio_constraints(
+    n: pypsa.Network, include_water_pits: bool = True
+) -> None:
     """
     Add TES charger ratio constraints.
 
@@ -936,16 +950,26 @@ def add_TES_charger_ratio_constraints(n: pypsa.Network) -> None:
     RuntimeError
         If the charger and discharger indices do not align.
     """
-    indices_charger_p_nom_extendable = n.links.index[
-        n.links.index.str.contains(
-            "water tanks charger|water pits charger|aquifer thermal energy storage charger"
+    charger_pattern = (
+        "water tanks charger|water pits charger|aquifer thermal energy storage charger"
+    )
+    discharger_pattern = (
+        "water tanks discharger|water pits discharger|aquifer thermal energy storage discharger"
+    )
+    if not include_water_pits:
+        charger_pattern = "water tanks charger|aquifer thermal energy storage charger"
+        discharger_pattern = (
+            "water tanks discharger|aquifer thermal energy storage discharger"
         )
+
+    indices_charger_p_nom_extendable = n.links.index[
+        n.links.index.str.contains(charger_pattern)
+        & ~n.links.index.str.contains("layer")
         & n.links.p_nom_extendable
     ]
     indices_discharger_p_nom_extendable = n.links.index[
-        n.links.index.str.contains(
-            "water tanks discharger|water pits discharger|aquifer thermal energy storage discharger"
-        )
+        n.links.index.str.contains(discharger_pattern)
+        & ~n.links.index.str.contains("layer")
         & n.links.p_nom_extendable
     ]
 
@@ -978,6 +1002,220 @@ def add_TES_charger_ratio_constraints(n: pypsa.Network) -> None:
     )
 
     n.model.add_constraints(lhs == 0, name="TES_charger_ratio")
+
+
+def _has_layered_ptes(n: pypsa.Network) -> bool:
+    """Return True if the network contains layered PTES stores."""
+    return n.stores.index.str.contains("water pits layer").any()
+
+
+def add_layered_ptes_volume_capacity_constraint(
+    n: pypsa.Network, ptes_ds: xr.Dataset
+) -> None:
+    """
+    Enforce energy-equivalent layer SOC ≤ aggregate e_nom.
+
+    For each node with layered PTES:
+        Σ_l  C_l · e_{l,t}  ≤  ē   ∀ t
+
+    where C_l converts layer volume [m3] to energy-equivalent [MWh]
+    and ē is the aggregate store's optimal capacity (e_nom variable).
+    """
+    layer_stores = n.stores.index[
+        n.stores.index.str.contains("water pits layer") & n.stores.e_nom_extendable
+    ]
+    agg_stores = n.stores.index[
+        n.stores.index.str.contains("water pits")
+        & ~n.stores.index.str.contains("layer")
+        & n.stores.e_nom_extendable
+    ]
+
+    constraints = []
+    for agg in agg_stores:
+        # Find corresponding layer stores (same prefix before "water pits")
+        prefix = agg.split("water pits")[0] + "water pits layer"
+        layers = layer_stores[layer_stores.str.startswith(prefix)]
+        if layers.empty:
+            continue
+
+        weighted_sum = None
+        m3_to_mwh_top_layer = ptes_ds["m3_to_mwh"].sel(layer=0).item()
+        for layer_name in layers:
+            # layer_idx = int(layer_name.split("layer")[-1].strip())
+            layer_soc_m3 = n.model["Store-e"].loc[:, layer_name]
+            weighted_sum = (
+                layer_soc_m3 if weighted_sum is None else weighted_sum + layer_soc_m3
+            )
+
+        agg_e_nom_mwh = n.model["Store-e_nom"].loc[agg]
+        agg_e_nom_m3 = agg_e_nom_mwh / m3_to_mwh_top_layer
+        constraints.append(weighted_sum - agg_e_nom_m3)
+
+    merged = linopy.expressions.merge(
+        constraints, dim="Store-ext" if PYPSA_V1 else "name"
+    )
+    n.model.add_constraints(merged == 0, name="layered_ptes_volume_capacity")
+
+
+def add_layered_ptes_heat_pump_capacity_constraint(
+    n: pypsa.Network,
+) -> None:
+    """
+    Enforce sum_l(p_nom_{layer_l_hp}) <= p_nom_{dummy_hp} per node.
+
+    Layer HPs have capital_cost=0; all investment cost is carried by the
+    per-node dummy HP. This constraint ties their nominal capacities so that
+    the dummy HP is sized to accommodate the total layer HP investment.
+    """
+    layer_hps = n.links.index[
+        n.links.index.str.contains("ptes layer")
+        & n.links.index.str.contains("heat pump")
+        & n.links.p_nom_extendable
+    ]
+    dummy_hps = n.links.index[
+        n.links.index.str.contains("ptes heat pump") & n.links.p_nom_extendable
+    ]
+
+    exprs = []
+    for dummy in dummy_hps:
+        node_prefix = dummy.replace(" ptes heat pump", "")
+        matching = layer_hps[layer_hps.str.startswith(node_prefix + " ptes layer")]
+        layer_sum = sum(n.model["Link-p_nom"].loc[hp] for hp in matching)
+        dummy_p_nom = n.model["Link-p_nom"].loc[dummy]
+        exprs.append(layer_sum - dummy_p_nom)
+
+    dim = "Link-ext" if PYPSA_V1 else "name"
+    merged = linopy.expressions.merge(exprs, dim=dim, cls=type(exprs[0]))
+    n.model.add_constraints(merged <= 0, name="layered_ptes_heat_pump_capacity")
+
+
+def add_layered_ptes_interlayer_flow_constraint(
+    n: pypsa.Network, ptes_ds: xr.Dataset
+) -> None:
+    """
+    Enforce standing loss as a per-layer downward interlayer diffusion.
+
+    Each layer loses energy in proportion to its own content above the cold
+    reference, realised as a deterministic downward interlayer flux:
+
+        (C_l - C_{l+1}) · p_{l→l+1, t}  =  γ · C_l · e_{l, t}   ∀ upper layer l, t
+
+    where C_l = m3_to_mwh[l] converts layer volume [m3] to energy [MWh],
+    e_{l,t} is the layer SOC [m3] and γ is the store standing-loss rate (the
+    aggregate store's ``standing_loss``, set from cost data in
+    prepare_sector_network). Moving 1 m3 from layer l down to l+1 destroys
+    (C_l - C_{l+1}) of stored energy.
+
+    Colder layers therefore lose less (C_l → 0 at the bottom; the coldest layer
+    has no downward link and loses nothing) and the loss cools the hot top one
+    step down rather than being routed to the floor. The total destroyed energy
+    still sums to γ · Σ_l C_l · e_l = γ · E, so the scalar γ calibration holds.
+    """
+    m3_to_mwh = ptes_ds["m3_to_mwh"].values  # (layer,)
+
+    agg_stores = n.stores.index[
+        n.stores.index.str.contains("water pits")
+        & ~n.stores.index.str.contains("layer")
+        & n.stores.e_nom_extendable
+    ]
+
+    constraints = []
+    for agg in agg_stores:
+        prefix = agg.split("water pits")[0]  # "<node> <heat system> "
+        gamma = float(n.stores.at[agg, "standing_loss"])
+
+        # Layer index -> store, so each downward link can reference its source layer.
+        layer_store = {
+            int(n.stores.at[s, "bus"].split("layer")[-1].strip()): s
+            for s in n.stores.index
+            if s.startswith(prefix + "water pits layer")
+        }
+
+        # Per layer l with a downward link: (C_l - C_{l+1}) p_{l→l+1} = γ C_l e_l.
+        interlayer_links = n.links.index[
+            n.links.index.str.startswith(prefix + "water pits inter")
+        ]
+        for link in interlayer_links:
+            upper = int(n.links.at[link, "bus0"].split("layer")[-1].strip())
+            delta_c = m3_to_mwh[upper] - m3_to_mwh[upper + 1]
+            lost = delta_c * n.model["Link-p"].loc[:, link]
+            stored = m3_to_mwh[upper] * n.model["Store-e"].loc[:, layer_store[upper]]
+            constraints.append(lost - gamma * stored)
+
+    if not constraints:
+        raise RuntimeError(
+            "No aggregate PTES store found for layered interlayer flow constraints."
+        )
+
+    merged = linopy.expressions.merge(
+        constraints, dim="Store-ext" if PYPSA_V1 else "name"
+    )
+    n.model.add_constraints(merged == 0, name="layered_ptes_interlayer_flow")
+
+
+def add_layered_ptes_aggregate_throughput_constraint(
+    n: pypsa.Network, ptes_ds: xr.Dataset
+) -> None:
+    """
+    Limit total energy-equivalent charging + discharging power by aggregate capacity.
+
+    For each node with layered PTES:
+        R · Σ_l C_l · (p_ch_{l,t} + p_dis_{l,t})  ≤  ē_nom   ∀ t
+
+    where R is the energy-to-power ratio, C_l the m3-to-MWh conversion,
+    p_ch/p_dis the layer charger/discharger operational power, and ē_nom the aggregate
+    store capacity.
+    """
+    layer_chargers = n.links.index[
+        n.links.index.str.contains("water pits charger")
+        & n.links.index.str.contains("layer")
+    ]
+    agg_stores = n.stores.index[
+        n.stores.index.str.contains("water pits")
+        & ~n.stores.index.str.contains("layer")
+        & n.stores.e_nom_extendable
+    ]
+
+    constraints = []
+    for agg in agg_stores:
+        prefix = agg.split("water pits")[0] + "water pits"
+
+        chargers = layer_chargers[layer_chargers.str.startswith(prefix + " charger")]
+        dischargers = pd.Index(
+            [c.replace(" charger ", " discharger ") for c in chargers]
+        ).intersection(n.links.index)
+        if chargers.empty or dischargers.empty:
+            continue
+
+        e2p_ratio = n.links.at[chargers[0], "energy to power ratio"]
+
+        weighted_sum = None
+        for ch, dis in zip(chargers, dischargers):
+            layer_idx = int(ch.rsplit("layer ", 1)[-1])
+            m3_to_mwh = float(ptes_ds["m3_to_mwh"].sel(layer=layer_idx).item())
+            term = (
+                n.model["Link-p"].loc[:, ch] + m3_to_mwh * n.model["Link-p"].loc[:, dis]
+            )
+            weighted_sum = term if weighted_sum is None else weighted_sum + term
+
+        # Charge/discharge power is limited to capacity / (energy-to-power ratio):
+        #   Σ_l C_l (p_ch + p_dis) ≤ ē_nom / R   ∀ t,
+        # i.e. R · Σ ≤ ē_nom. (E.g. a 4500 MWh pit with R = 150 h charges/discharges
+        # at ≤ 30 MW.) NB: R is on the energy side -- writing Σ ≤ R · ē_nom would
+        # leave the bound effectively non-binding.
+        agg_e_nom = n.model["Store-e_nom"].loc[agg]
+        constraints.append(e2p_ratio * weighted_sum - agg_e_nom)
+
+    if not constraints:
+        logger.warning(
+            "No valid layered PTES charger/discharger pairs found for aggregate throughput constraints. Skipping layered_ptes_aggregate_throughput."
+        )
+        return
+
+    merged = linopy.expressions.merge(
+        constraints, dim="Store-ext" if PYPSA_V1 else "name"
+    )
+    n.model.add_constraints(merged <= 0, name="layered_ptes_aggregate_throughput")
 
 
 def add_battery_constraints(n):
@@ -1217,14 +1455,28 @@ def extra_functionality(
     ):
         add_solar_potential_constraints(n, config)
 
+    layered_ptes = _has_layered_ptes(n)
+
     if n.config.get("sector", {}).get("ttes", False):
         if n.buses.index.str.contains(
             r"urban central heat|urban decentral heat|rural heat",
             case=False,
             na=False,
         ).any():
-            add_TES_energy_to_power_ratio_constraints(n)
-            add_TES_charger_ratio_constraints(n)
+            add_TES_energy_to_power_ratio_constraints(
+                n, include_water_pits=not layered_ptes
+            )
+            add_TES_charger_ratio_constraints(
+                n, include_water_pits=not layered_ptes
+            )
+
+    if layered_ptes:
+        ptes_ds = xr.open_dataset(snakemake.input.ptes_operations)
+        add_layered_ptes_volume_capacity_constraint(n, ptes_ds)
+        add_layered_ptes_interlayer_flow_constraint(n, ptes_ds)
+        add_layered_ptes_heat_pump_capacity_constraint(n)
+        add_layered_ptes_aggregate_throughput_constraint(n, ptes_ds)
+        ptes_ds.close()
 
     add_battery_constraints(n)
     add_lossy_bidirectional_link_constraints(n)

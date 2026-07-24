@@ -1,0 +1,88 @@
+remote:
+  ssh: "zecm"
+  path: "/home/users/c/cpschau/scratch/pypsa-eur-sysgf"
+
+# Capex sweep for layered PTES: PTES vs no-PTES across three district-heating
+# forward-temperature regimes, with a store-capex sweep (overnight EUR/m3) on the
+# PTES runs. The 95-clip regime additionally compares the layered and the simple
+# energy-only PTES model.
+#
+# NOTE: new prefix so the prior layer-count run under
+# results/260512_test_layered_ptes/ is preserved untouched. Copy it elsewhere
+# first if you want the two side by side.
+run:
+  prefix: "260531_layered_ptes_capex"
+  name:
+    # T regime "DE max forward T ~ 95 C"
+    - T95_noptes
+    - T95_ptes_capex50
+    - T95_ptes_capex25
+    - T95_ptes_capex10
+    - T95_ptes_capex5
+    # T regime "DE max forward T ~ 80 C"
+    - T80_noptes
+    - T80_ptes_capex50
+    - T80_ptes_capex25
+    - T80_ptes_capex10
+    - T80_ptes_capex5
+    # T regime "DE max forward T ~ 95 C, lower-clipped at 90 C" (+ simple model)
+    - T95clip90_noptes
+    - T95clip90_ptes_capex50
+    - T95clip90_ptes_capex25
+    - T95clip90_ptes_capex10
+    - T95clip90_ptes_capex5
+    - T95clip90_simple_capex50
+    - T95clip90_simple_capex25
+    - T95clip90_simple_capex10
+    - T95clip90_simple_capex5
+  scenarios:
+    enable: true
+    file: config/scenarios.layered_ptes.yaml
+
+countries: ['AT', 'BE', 'CH', 'CZ', 'DE', 'DK', 'FR', 'GB', 'LU', 'NL', 'NO', 'PL', 'SE', 'ES', 'IT']
+scenario:
+  clusters:
+    - 27
+  planning_horizons:
+    - 2050
+clustering:
+  focus_weights:
+  # 27 nodes: 8 for Germany, 3 for Italy, 2 each for Denmark, UK and Spain, 1 per each of other 10 "Stromnachbarn"
+    'DE': 0.2965
+    'AT': 0.0370
+    'BE': 0.0370
+    'CH': 0.0370
+    'CZ': 0.0370
+    'DK': 0.0741
+    'FR': 0.0741
+    'GB': 0.0741
+    'LU': 0.0370
+    'NL': 0.0370
+    'NO': 0.0370
+    'PL': 0.0370
+    'SE': 0.0370
+    'ES': 0.0741
+    'IT': 0.0741
+  temporal:
+    resolution_sector: 365H
+  renewable_carriers:
+    - solar
+    - onwind
+    - offwind-ac
+    - offwind-dc
+    - hydro
+sector:
+  co2_network: true
+  co2_spatial: true
+  district_heating:
+    geothermal:
+      ignore_missing_regions: true
+    ptes:
+      # PTES temperature span 90 -> 10 C (bottom lowered to 10 C). The per-regime
+      # operational top is set in the scenarios; design_* stay 90/10 so e_max_pu
+      # reflects the reduced usable spread at lower operational top temperatures.
+      bottom_temperature: 10
+      design_bottom_temperature: 10
+
+atlite:
+  nprocesses: 4
