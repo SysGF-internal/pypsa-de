@@ -1,5 +1,10 @@
 # Licensed HI data is not distributed with the repository.
 # Replace this path after the licence/data handoff has been completed.
+run:
+  name: ates-hi-grid-smoke
+  scenarios:
+    enable: false
+
 sector:
   district_heating:
     ates:
