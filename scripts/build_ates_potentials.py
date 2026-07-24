@@ -4,53 +4,27 @@
 """
 Calculate per-region Aquifer Thermal Energy Storage (ATES) parameters.
 
-Gridded ATES data (square ~1 km cells with a per-cell CAPEX and annual retention
-factor) are aggregated onto the model's onshore regions (district-heating
-subnodes when enabled). Each cell is assigned to the region that contains it and
-aggregated with an inverse-CAPEX-weighted mean, so cheaper cells pull the
-regional average more strongly. Regions without any cell are marked infeasible
-(``e_nom_max = 0`` downstream).
+Two explicitly selectable sources are supported:
 
-The per-cell CAPEX is given as an overnight (non-annualised) investment, so it is
-annualised here using the configured ATES lifetime and discount rate.
+- ``bgr`` retains the public BGR aquifer-area potential model. Suitable aquifer
+  area inside buffered district-heating areas is converted to MWh using the
+  region's mean district-heating forward/return temperature difference.
+- ``hi_grid`` aggregates the separately licensed HI grid onto the model's
+  onshore regions using inverse-CAPEX weights.
 
-The script outputs, per region:
-
-- ``capital_cost``: annualised CAPEX [EUR/MW/a], applied fully to the ATES
-  charger in ``prepare_sector_network``.
-- ``hourly_standing_losses``: hourly self-discharge of the ATES store,
-  derived as ``1 - annual_retention_factor ** (1 / 8760)``.
-- ``feasible``: whether ATES can be built in the region.
-
-Relevant Settings
------------------
-
-.. code:: yaml
-    costs:
-        fill_values:
-            discount rate:
-    sector:
-        district_heating:
-            ates:
-                lifetime:
-
-Inputs
-------
-- ``ates_grid``: gridded ATES data (GeoPackage) with ``CAPEX_EUR_MW`` and
-  ``VERLUSTRATE`` columns. Despite its name, the current HI handover interprets
-  ``VERLUSTRATE`` as the fraction retained after one year.
-- ``regions_onshore``: onshore (sub)region shapes.
-
-Outputs
--------
-- ``ates_potentials``: CSV indexed by region ``name`` with columns
-  ``capital_cost``, ``hourly_standing_losses`` and ``feasible``.
+The HI provider confirmed that ``CAPEX_EUR_MW`` and ``VERLUSTRATE`` are the
+relevant columns, that lower-CAPEX cells should receive higher weight, and that
+``VERLUSTRATE`` is converted to an hourly retained fraction with the 8760th
+root. Its output contains annualised ``capital_cost``,
+``hourly_standing_losses`` and ``feasible``. The BGR output retains the legacy
+``ates_potential`` energy-capacity limit.
 """
 
 import logging
 
 import geopandas as gpd
 import pandas as pd
+import xarray as xr
 
 from scripts._helpers import configure_logging, set_scenario_config
 
@@ -65,9 +39,10 @@ def annual_retention_to_hourly_standing_loss(
     """
     Convert an annual retained-energy fraction to hourly self-discharge.
 
-    The interpretation of the source column ``VERLUSTRATE`` must be confirmed
-    with the data provider before production use. The handover implementation
-    treats it as a retention factor rather than a lost-energy fraction.
+    The HI data provider confirmed that ``VERLUSTRATE`` is to be converted by
+    taking its 8760th root. It is therefore used here as the annually retained
+    energy fraction; PyPSA's ``standing_loss`` is one minus the hourly retained
+    fraction.
     """
     return 1 - annual_retention ** (1 / HOURS_PER_YEAR)
 
@@ -101,6 +76,11 @@ def aggregate_ates_to_regions(
         Indexed by region ``name`` with columns ``capex_col``, ``loss_col`` and
         ``n_cells``; NaN for regions without any cell.
     """
+    if (ates[capex_col] <= 0).any():
+        raise ValueError(f"{capex_col} must be positive for inverse-CAPEX weighting")
+    if not ates[loss_col].between(0, 1).all():
+        raise ValueError(f"{loss_col} must contain annual retention factors in [0, 1]")
+
     cells = ates.to_crs(regions.crs).copy()
     cells["geometry"] = cells.geometry.representative_point()
     joined = gpd.sjoin(
@@ -128,9 +108,148 @@ def aggregate_ates_to_regions(
     return agg.reindex(regions["name"])
 
 
-if __name__ == "__main__":
+def aggregate_bgr_ates_potential(
+    aquifers: gpd.GeoDataFrame,
+    regions: gpd.GeoDataFrame,
+    dh_areas: gpd.GeoDataFrame,
+    temperature_difference: pd.Series,
+    *,
+    suitable_aquifer_types: list[str],
+    aquifer_volumetric_heat_capacity: float,
+    fraction_of_aquifer_area_available: float,
+    effective_screen_length: float,
+    dh_area_buffer: float,
+) -> pd.Series:
+    """Convert suitable BGR aquifer area in DH regions to storage MWh."""
+    if "AQUIF_NAME" not in aquifers:
+        raise KeyError("BGR aquifer data must contain an 'AQUIF_NAME' column")
+
+    regions = regions.to_crs("EPSG:3035")
+    aquifers = aquifers.to_crs(regions.crs).copy()
+    dh_areas = dh_areas.to_crs(regions.crs).copy()
+    aquifers.geometry = aquifers.geometry.make_valid()
+    suitable = aquifers[aquifers["AQUIF_NAME"].isin(suitable_aquifer_types)]
+
+    result = pd.Series(0.0, index=regions["name"], name="ates_potential")
+    if suitable.empty or dh_areas.empty:
+        return result
+
+    # Union first so overlapping DH buffers cannot count aquifer area twice.
+    buffered_dh = gpd.GeoDataFrame(
+        geometry=[dh_areas.geometry.buffer(dh_area_buffer).union_all()],
+        crs=regions.crs,
+    )
+    aquifers_by_region = gpd.overlay(
+        suitable[["geometry"]],
+        regions[["name", "geometry"]],
+        how="intersection",
+    )
+    eligible = gpd.overlay(aquifers_by_region, buffered_dh, how="intersection")
+    if eligible.empty:
+        return result
+
+    area_by_region = eligible.groupby("name").geometry.apply(lambda s: s.area.sum())
+    delta_t = temperature_difference.reindex(result.index).clip(lower=0).fillna(0.0)
+    # kJ/(m³ K) * m * K = kJ/m²; 3.6e6 kJ = 1 MWh.
+    mwh_per_m2 = (
+        aquifer_volumetric_heat_capacity
+        * fraction_of_aquifer_area_available
+        * effective_screen_length
+        * delta_t
+        / 3.6e6
+    )
+    result.loc[area_by_region.index] = (
+        area_by_region * mwh_per_m2.reindex(area_by_region.index)
+    )
+    return result
+
+
+def _mean_temperature_difference(forward_file: str, return_file: str) -> pd.Series:
+    """Return the temporal-mean forward-minus-return temperature per region."""
+    forward = xr.open_dataarray(forward_file)
+    return_ = xr.open_dataarray(return_file)
+    try:
+        time_dims = [d for d in ("time", "snapshot") if d in forward.dims]
+        forward_mean = forward.mean(dim=time_dims).to_series()
+        time_dims = [d for d in ("time", "snapshot") if d in return_.dims]
+        return_mean = return_.mean(dim=time_dims).to_series()
+        return (forward_mean - return_mean).clip(lower=0)
+    finally:
+        forward.close()
+        return_.close()
+
+
+def build_bgr_potentials(snakemake) -> None:
+    """Build the public BGR energy-capacity potential table."""
+    regions = gpd.read_file(snakemake.input.regions_onshore)
+    aquifers = gpd.read_file(snakemake.input.aquifer_shapes_shp)
+    aquifers.geometry = aquifers.geometry.make_valid()
+    dh_areas = gpd.read_file(snakemake.input.dh_areas)
+
+    all_aquifers = gpd.overlay(
+        aquifers.to_crs("EPSG:3035")[["geometry"]],
+        regions.to_crs("EPSG:3035")[["name", "geometry"]],
+        how="intersection",
+    )
+    covered = set(all_aquifers["name"])
+    missing = set(regions["name"]) - covered
+    if missing:
+        message = f"Regions without BGR aquifer coverage: {sorted(missing)}"
+        if not snakemake.params.ignore_missing_regions:
+            raise ValueError(
+                message
+                + ". Set sector.district_heating.ates.ignore_missing_regions: true "
+                "to assign zero potential."
+            )
+        logger.warning(message)
+
+    delta_t = _mean_temperature_difference(
+        snakemake.input.central_heating_forward_temperature_profiles,
+        snakemake.input.central_heating_return_temperature_profiles,
+    )
+    potential = aggregate_bgr_ates_potential(
+        aquifers,
+        regions,
+        dh_areas,
+        delta_t,
+        suitable_aquifer_types=snakemake.params.suitable_aquifer_types,
+        aquifer_volumetric_heat_capacity=snakemake.params.aquifer_volumetric_heat_capacity,
+        fraction_of_aquifer_area_available=snakemake.params.fraction_of_aquifer_area_available,
+        effective_screen_length=snakemake.params.effective_screen_length,
+        dh_area_buffer=snakemake.params.dh_area_buffer,
+    )
+    potential.to_frame().to_csv(snakemake.output.ates_potentials, index_label="name")
+
+
+def build_hi_grid_potentials(snakemake) -> None:
+    """Build annualised regional cost/loss inputs from the licensed HI grid."""
     from scripts.add_electricity import calculate_annuity
 
+    regions = gpd.read_file(snakemake.input.regions_onshore)
+    ates_grid = gpd.read_file(snakemake.input.ates_grid)[
+        ["CAPEX_EUR_MW", "VERLUSTRATE", "geometry"]
+    ]
+    ates_by_region = aggregate_ates_to_regions(ates_grid, regions)
+    feasible = ates_by_region["n_cells"].notna() & (ates_by_region["n_cells"] > 0)
+    logger.info("ATES feasible in %s of %s regions", int(feasible.sum()), len(feasible))
+    annuity = calculate_annuity(
+        snakemake.params.lifetime, snakemake.params.discount_rate
+    )
+    out = pd.DataFrame(
+        {
+            "capital_cost": (ates_by_region["CAPEX_EUR_MW"] * annuity).where(
+                feasible, 0.0
+            ),
+            "hourly_standing_losses": annual_retention_to_hourly_standing_loss(
+                ates_by_region["VERLUSTRATE"]
+            ).where(feasible, 0.0),
+            "feasible": feasible,
+        }
+    )
+    out.to_csv(snakemake.output.ates_potentials, index_label="name")
+
+
+if __name__ == "__main__":
     if "snakemake" not in globals():
         from scripts._helpers import mock_snakemake
 
@@ -141,37 +260,7 @@ if __name__ == "__main__":
     configure_logging(snakemake)
     set_scenario_config(snakemake)
 
-    regions = gpd.read_file(snakemake.input.regions_onshore)
-
-    logger.info("Loading gridded ATES data")
-    ates_grid = gpd.read_file(snakemake.input.ates_grid)[
-        ["CAPEX_EUR_MW", "VERLUSTRATE", "geometry"]
-    ]
-
-    logger.info("Aggregating ATES data to regions")
-    ates_by_region = aggregate_ates_to_regions(ates_grid, regions)
-
-    feasible = ates_by_region["n_cells"].notna() & (ates_by_region["n_cells"] > 0)
-    logger.info(f"ATES feasible in {int(feasible.sum())} of {len(feasible)} regions")
-
-    hourly_standing_losses = annual_retention_to_hourly_standing_loss(
-        ates_by_region["VERLUSTRATE"]
-    )
-
-    # Annualise the overnight CAPEX.
-    annuity = calculate_annuity(
-        snakemake.params.lifetime, snakemake.params.discount_rate
-    )
-    capital_cost = ates_by_region["CAPEX_EUR_MW"] * annuity
-
-    out = pd.DataFrame(
-        {
-            # Infeasible regions get e_nom_max=0 downstream; fill finite defaults.
-            "capital_cost": capital_cost.where(feasible, 0.0),
-            "hourly_standing_losses": hourly_standing_losses.where(feasible, 0.0),
-            "feasible": feasible,
-        }
-    )
-
-    logger.info(f"Writing results to {snakemake.output.ates_potentials}")
-    out.to_csv(snakemake.output.ates_potentials, index_label="name")
+    if snakemake.params.data_source == "hi_grid":
+        build_hi_grid_potentials(snakemake)
+    else:
+        build_bgr_potentials(snakemake)

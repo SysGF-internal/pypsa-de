@@ -1,0 +1,13 @@
+# Licensed HI-grid ATES example. Keep the production GeoPackage outside Git.
+sector:
+  district_heating:
+    ates:
+      enable: true
+      data_source: hi_grid
+      data_file: /path/to/licensed/HI_ATES_grid.gpkg
+  heat_sources:
+    urban central:
+    - air
+    - ptes
+    - geothermal
+    - ates

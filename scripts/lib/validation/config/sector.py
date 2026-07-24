@@ -134,13 +134,14 @@ class _PtesConfig(BaseModel):
 class _AtesConfig(BaseModel):
     """Aquifer thermal energy storage (ATES) settings."""
 
-    enable: bool = Field(
-        False,
-        description="Enable gridded ATES potentials for urban central heating.",
+    enable: bool = False
+    data_source: Literal["bgr", "hi_grid"] = Field(
+        "bgr",
+        description="ATES potential source: the public BGR aquifer model or the licensed HI gridded dataset.",
     )
     data_file: str | None = Field(
         None,
-        description="Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled.",
+        description="Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'.",
     )
     lifetime: float = Field(
         20,
@@ -151,6 +152,15 @@ class _AtesConfig(BaseModel):
         0.035,
         description="Marginal cost of charging ATES in EUR/MWh.",
     )
+    suitable_aquifer_types: list[str] = Field(
+        default_factory=lambda: ["Highly productive porous aquifers"]
+    )
+    aquifer_volumetric_heat_capacity: float = 2600
+    fraction_of_aquifer_area_available: float = 0.2
+    effective_screen_length: float = 20
+    capex_as_fraction_of_geothermal_heat_source: float = 0.75
+    recovery_factor: float = 0.6
+    ignore_missing_regions: bool = False
 
 
 class _DistrictHeatingConfig(ConfigModel):
@@ -1165,15 +1175,16 @@ class SectorConfig(BaseModel):
     @model_validator(mode="after")
     def validate_ates_in_heat_sources(self):
         """
-        Ensure ``ates`` is listed in ``heat_sources.urban central`` when
-        ``district_heating.ates.enable`` is true.
+        Validate the licensed HI-grid pathway when it is enabled.
 
         ``prepare_sector_network.add_heat`` builds the ATES discharge / boosting
         links (heat pump from the ``ates heat`` resource bus to district heat)
-        only when ATES appears in the heat sources, so enabling ATES without
-        listing it would silently drop the discharge path.
+        only for the HI-grid source. The legacy BGR pathway remains a direct
+        district-heat store and does not require a private file or heat-source
+        entry.
         """
-        if self.district_heating.ates.enable:
+        ates = self.district_heating.ates
+        if ates.enable and ates.data_source == "hi_grid":
             urban_central_sources = self.heat_sources.get(
                 HeatSystemType.URBAN_CENTRAL, []
             )
@@ -1183,9 +1194,9 @@ class SectorConfig(BaseModel):
                     "heat_sources.urban central. Add 'ates' to heat_sources.urban "
                     "central or disable ATES."
                 )
-            if not self.district_heating.ates.data_file:
+            if not ates.data_file:
                 raise ValueError(
-                    "district_heating.ates.enable is true but no ATES input file "
+                    "district_heating.ates.data_source is 'hi_grid' but no ATES input file "
                     "is configured. Set district_heating.ates.data_file to the "
                     "licensed GeoPackage or disable ATES."
                 )

@@ -4315,8 +4315,16 @@
               "properties": {
                 "enable": {
                   "default": false,
-                  "description": "Enable gridded ATES potentials for urban central heating.",
                   "type": "boolean"
+                },
+                "data_source": {
+                  "default": "bgr",
+                  "description": "ATES potential source: the public BGR aquifer model or the licensed HI gridded dataset.",
+                  "enum": [
+                    "bgr",
+                    "hi_grid"
+                  ],
+                  "type": "string"
                 },
                 "data_file": {
                   "anyOf": [
@@ -4328,7 +4336,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled."
+                  "description": "Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'."
                 },
                 "lifetime": {
                   "default": 20,
@@ -4340,6 +4348,36 @@
                   "default": 0.035,
                   "description": "Marginal cost of charging ATES in EUR/MWh.",
                   "type": "number"
+                },
+                "suitable_aquifer_types": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "aquifer_volumetric_heat_capacity": {
+                  "default": 2600,
+                  "type": "number"
+                },
+                "fraction_of_aquifer_area_available": {
+                  "default": 0.2,
+                  "type": "number"
+                },
+                "effective_screen_length": {
+                  "default": 20,
+                  "type": "number"
+                },
+                "capex_as_fraction_of_geothermal_heat_source": {
+                  "default": 0.75,
+                  "type": "number"
+                },
+                "recovery_factor": {
+                  "default": 0.6,
+                  "type": "number"
+                },
+                "ignore_missing_regions": {
+                  "default": false,
+                  "type": "boolean"
                 }
               }
             },
@@ -5972,8 +6010,16 @@
       "properties": {
         "enable": {
           "default": false,
-          "description": "Enable gridded ATES potentials for urban central heating.",
           "type": "boolean"
+        },
+        "data_source": {
+          "default": "bgr",
+          "description": "ATES potential source: the public BGR aquifer model or the licensed HI gridded dataset.",
+          "enum": [
+            "bgr",
+            "hi_grid"
+          ],
+          "type": "string"
         },
         "data_file": {
           "anyOf": [
@@ -5985,7 +6031,7 @@
             }
           ],
           "default": null,
-          "description": "Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled."
+          "description": "Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'."
         },
         "lifetime": {
           "default": 20,
@@ -5997,6 +6043,36 @@
           "default": 0.035,
           "description": "Marginal cost of charging ATES in EUR/MWh.",
           "type": "number"
+        },
+        "suitable_aquifer_types": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "aquifer_volumetric_heat_capacity": {
+          "default": 2600,
+          "type": "number"
+        },
+        "fraction_of_aquifer_area_available": {
+          "default": 0.2,
+          "type": "number"
+        },
+        "effective_screen_length": {
+          "default": 20,
+          "type": "number"
+        },
+        "capex_as_fraction_of_geothermal_heat_source": {
+          "default": 0.75,
+          "type": "number"
+        },
+        "recovery_factor": {
+          "default": 0.6,
+          "type": "number"
+        },
+        "ignore_missing_regions": {
+          "default": false,
+          "type": "boolean"
         }
       }
     },
@@ -6538,8 +6614,16 @@
           "properties": {
             "enable": {
               "default": false,
-              "description": "Enable gridded ATES potentials for urban central heating.",
               "type": "boolean"
+            },
+            "data_source": {
+              "default": "bgr",
+              "description": "ATES potential source: the public BGR aquifer model or the licensed HI gridded dataset.",
+              "enum": [
+                "bgr",
+                "hi_grid"
+              ],
+              "type": "string"
             },
             "data_file": {
               "anyOf": [
@@ -6551,7 +6635,7 @@
                 }
               ],
               "default": null,
-              "description": "Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled."
+              "description": "Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'."
             },
             "lifetime": {
               "default": 20,
@@ -6563,6 +6647,36 @@
               "default": 0.035,
               "description": "Marginal cost of charging ATES in EUR/MWh.",
               "type": "number"
+            },
+            "suitable_aquifer_types": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "aquifer_volumetric_heat_capacity": {
+              "default": 2600,
+              "type": "number"
+            },
+            "fraction_of_aquifer_area_available": {
+              "default": 0.2,
+              "type": "number"
+            },
+            "effective_screen_length": {
+              "default": 20,
+              "type": "number"
+            },
+            "capex_as_fraction_of_geothermal_heat_source": {
+              "default": 0.75,
+              "type": "number"
+            },
+            "recovery_factor": {
+              "default": 0.6,
+              "type": "number"
+            },
+            "ignore_missing_regions": {
+              "default": false,
+              "type": "boolean"
             }
           }
         },
@@ -11003,8 +11117,16 @@
               "properties": {
                 "enable": {
                   "default": false,
-                  "description": "Enable gridded ATES potentials for urban central heating.",
                   "type": "boolean"
+                },
+                "data_source": {
+                  "default": "bgr",
+                  "description": "ATES potential source: the public BGR aquifer model or the licensed HI gridded dataset.",
+                  "enum": [
+                    "bgr",
+                    "hi_grid"
+                  ],
+                  "type": "string"
                 },
                 "data_file": {
                   "anyOf": [
@@ -11016,7 +11138,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Path to the licensed ATES GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE. Required when ATES is enabled."
+                  "description": "Path to the licensed HI GeoPackage containing CAPEX_EUR_MW and VERLUSTRATE; required for data_source 'hi_grid'."
                 },
                 "lifetime": {
                   "default": 20,
@@ -11028,6 +11150,36 @@
                   "default": 0.035,
                   "description": "Marginal cost of charging ATES in EUR/MWh.",
                   "type": "number"
+                },
+                "suitable_aquifer_types": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "aquifer_volumetric_heat_capacity": {
+                  "default": 2600,
+                  "type": "number"
+                },
+                "fraction_of_aquifer_area_available": {
+                  "default": 0.2,
+                  "type": "number"
+                },
+                "effective_screen_length": {
+                  "default": 20,
+                  "type": "number"
+                },
+                "capex_as_fraction_of_geothermal_heat_source": {
+                  "default": 0.75,
+                  "type": "number"
+                },
+                "recovery_factor": {
+                  "default": 0.6,
+                  "type": "number"
+                },
+                "ignore_missing_regions": {
+                  "default": false,
+                  "type": "boolean"
                 }
               }
             },
