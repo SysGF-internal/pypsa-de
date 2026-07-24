@@ -23,14 +23,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
+
+from scripts._helpers import configure_logging, mock_snakemake
 from scripts.sysgf_plot_helpers import (
     apply_carrier_groups,
     clean_label,
     get_colors,
     process_networks,
 )
-
-from scripts._helpers import configure_logging, mock_snakemake
 
 logger = logging.getLogger(__name__)
 
