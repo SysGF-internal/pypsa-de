@@ -771,30 +771,8 @@ rule build_cop_profiles:
 
 
 rule build_ptes_operations:
-    input:
-        central_heating_forward_temperature_profiles=resources(
-            "central_heating_forward_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
-        ),
-        central_heating_return_temperature_profiles=resources(
-            "central_heating_return_temperature_profiles_base_s_{clusters}_{planning_horizons}.nc"
-        ),
-        regions_onshore=input_regions_onshore_district_heating,
-    output:
-        ptes_top_temperature_profiles=resources(
-            "temp_ptes_top_profiles_base_s_{clusters}_{planning_horizons}.nc"
-        ),
-        ptes_e_max_pu_profiles=resources(
-            "ptes_e_max_pu_profiles_base_s_{clusters}_{planning_horizons}.nc"
-        ),
-        ptes_boost_per_discharge_profiles=resources(
-            "ptes_boost_per_discharge_profiles_base_s_{clusters}_{planning_horizons}.nc"
-        ),
-    log:
-        logs("build_ptes_operations_s_{clusters}_{planning_horizons}.log"),
-    benchmark:
-        benchmarks("build_ptes_operations_s_{clusters}_{planning_horizons}")
-    resources:
-        mem_mb=2000,
+    message:
+        "Building PTES operating coefficients for {wildcards.clusters} clusters and {wildcards.planning_horizons} planning horizon"
     params:
         top_temperature=config_provider(
             "sector",
