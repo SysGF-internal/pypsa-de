@@ -1,0 +1,41 @@
+# Fast, scenario-database-independent DAG check for the consolidated SysGF line.
+#
+# Usage:
+#   pixi run snakemake -n --cores 1 \
+#     --configfile config/test/config.integration_dag.yaml
+
+run:
+  prefix: integration-dag
+  name: integration-smoke
+  scenarios:
+    enable: false
+    file: config/scenarios.manual.yaml
+  shared_resources:
+    policy: false
+
+scenario:
+  clusters:
+  - 5
+  planning_horizons:
+  - 2045
+
+countries:
+- DE
+
+snapshots:
+  start: "2013-03-01"
+  end: "2013-03-08"
+
+clustering:
+  temporal:
+    resolution_sector: 24H
+
+sector:
+  district_heating:
+    subnodes:
+      enable: true
+      countries:
+      - DE
+      demand_share: 0.5
+    ptes:
+      enable: true
