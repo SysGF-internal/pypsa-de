@@ -45,7 +45,7 @@ scenario:
   ll:
   - vopt
   clusters:
-  - 18
+  - 23
   opts:
   - ''
   sector_opts:
@@ -54,27 +54,28 @@ scenario:
   - 2030
   - 2045
 
-# Halved German resolution for the test: 4 DE nodes + 1 node per each of the
-# 14 neighbours = 18 clusters. Weights follow the recipe used for the 27/49
-# node setups (target share minus 5e-5, rounded to 4 digits, so the total
-# stays below 1).
+# Halved German resolution for the test: 4 DE nodes instead of the production
+# 8. The 15-country topology contains 20 country/subnetwork groups, so it needs
+# at least 20 clusters; assigning one to each non-German group plus 4 to DE
+# gives 23 clusters. Six-decimal weights sum to 0.999995 and reproduce that
+# exact integer allocation.
 clustering:
   focus_weights:
-    'DE': 0.2222
-    'AT': 0.0555
-    'BE': 0.0555
-    'CH': 0.0555
-    'CZ': 0.0555
-    'DK': 0.0555
-    'FR': 0.0555
-    'GB': 0.0555
-    'LU': 0.0555
-    'NL': 0.0555
-    'NO': 0.0555
-    'PL': 0.0555
-    'SE': 0.0555
-    'ES': 0.0555
-    'IT': 0.0555
+    'DE': 0.173913
+    'AT': 0.043478
+    'BE': 0.043478
+    'CH': 0.043478
+    'CZ': 0.043478
+    'DK': 0.086956
+    'FR': 0.086956
+    'GB': 0.086956
+    'LU': 0.043478
+    'NL': 0.043478
+    'NO': 0.043478
+    'PL': 0.043478
+    'SE': 0.043478
+    'ES': 0.086956
+    'IT': 0.086956
   temporal:
     resolution_sector: 24H
 
