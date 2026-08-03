@@ -33,9 +33,11 @@ class _SubnodesConfig(BaseModel):
         description=(
             "Cumulative district heating demand share to represent explicitly. "
             "Values in [0, 1] are interpreted as fractions; values in (1, 100] "
-            "are interpreted as percentages. This mode currently requires "
-            "exactly one planning horizon because the selected dh_subnodes "
-            "resources are shared across planning horizons."
+            "are interpreted as percentages. Takes precedence over `n_subnodes` "
+            "when set. The dh_subnodes resources are shared across planning "
+            "horizons, so with several horizons the selection is made once "
+            "against the final planning horizon and the resulting set of "
+            "explicit systems is used by all of them."
         ),
     )
     countries: list[str] = Field(

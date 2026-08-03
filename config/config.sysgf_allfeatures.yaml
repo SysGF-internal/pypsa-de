@@ -1,0 +1,186 @@
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# SysGF all-features integration test.
+#
+# Purpose: exercise every SysGF district-heating feature in one myopic run and
+# quantify the system impact of thermal storage. This is the first setup that
+# activates all heat sources (air/ground, river, lake and sea water, geothermal
+# and all six PtX waste-heat streams) together with all three TES technologies
+# (TTES, PTES, ATES) on an explicit district-heating representation.
+#
+# Resolution is deliberately coarse: DE is clustered to 4 nodes instead of the
+# production 8 (see clustering.focus_weights) and the sector model runs at 365H.
+# Use config.sysgf_allfeatures_24H.yaml for the TES impact numbers -- 365H has
+# 24 snapshots per year and cannot represent storage cycling.
+#
+# Scenario matrix (config/scenarios.sysgf_allfeatures.yaml):
+#   TESoff  -- TTES, PTES and ATES all disabled
+#   TESon   -- TTES, PTES and ATES all enabled
+# One variable differs between them: the availability of thermal storage.
+
+run:
+  prefix: 20260803_allfeatures_365H
+  name:
+  - TESoff
+  - TESon
+  scenarios:
+    enable: true
+    manual_file: config/scenarios.sysgf_allfeatures.yaml
+    file: config/scenarios.automated.sysgf_allfeatures.yaml
+  shared_resources:
+    policy: base
+    exclude:
+    - existing_heating.csv
+    - costs
+    - retrieve_cost
+    - industry_sector_ratios
+    - build_industry_sector_ratios
+    - modify_existing_heating
+
+foresight: myopic
+
+scenario:
+  ll:
+  - vopt
+  clusters:
+  - 18
+  opts:
+  - ''
+  sector_opts:
+  - none
+  planning_horizons:
+  - 2030
+  - 2045
+
+# Halved German resolution for the test: 4 DE nodes + 1 node per each of the
+# 14 neighbours = 18 clusters. Weights follow the recipe used for the 27/49
+# node setups (target share minus 5e-5, rounded to 4 digits, so the total
+# stays below 1).
+clustering:
+  focus_weights:
+    'DE': 0.2222
+    'AT': 0.0555
+    'BE': 0.0555
+    'CH': 0.0555
+    'CZ': 0.0555
+    'DK': 0.0555
+    'FR': 0.0555
+    'GB': 0.0555
+    'LU': 0.0555
+    'NL': 0.0555
+    'NO': 0.0555
+    'PL': 0.0555
+    'SE': 0.0555
+    'ES': 0.0555
+    'IT': 0.0555
+  temporal:
+    resolution_sector: 365H
+
+co2_budget:
+  2030: 0.35
+  2045: 0.00
+
+electricity:
+  renewable_carriers: [solar, solar-hsat, onwind, offwind-ac, offwind-dc, hydro]
+
+wasserstoff_kernnetz:
+  enable: false
+
+fix_foreign_investments:
+  enable: false
+  reference_scenario: null
+
+sector:
+  chp:
+    enable: true
+  # All three thermal storage technologies; the scenario file switches them
+  # on and off together.
+  ttes: true
+  tes_tau:
+    decentral: 3
+    central: 180
+  district_heating:
+    potential:
+      DE: 0.5
+      default: 0.5
+    progress:
+      2030: 0.5
+      2045: 1.0
+    # Explicit DH systems from the European dh_areas dataset: the smallest set
+    # of German systems that covers 50 % of the model's German urban-central
+    # heat demand.
+    subnodes:
+      enable: true
+      demand_share: 0.5
+      countries: ['DE']
+      n_subnodes: 40
+      demand_column: Dem_GWh
+      label_column: Label
+      use_isi_data_assumptions: false
+      census_areas:
+        enable: false
+    # Geothermal potentials are not available for every clustered region at
+    # this resolution.
+    ignore_missing_geothermal_data: true
+    heat_pump_cooling_iterative: false
+    ptes:
+      enable: true
+      dynamic_capacity: false
+      discharge_resistive_boosting: false
+      temperature_dependent_capacity: false
+      top_temperature: 90
+      bottom_temperature: 35
+      design_top_temperature: 90
+      design_bottom_temperature: 35
+      potential_limit:
+        enable: true
+        explicit_subnodes: true
+        remaining_regions: true
+        osm_landcover_codes: [21, 23, 32, 33]
+        excluder_resolution: 10
+        min_area: 10000
+        default_capacity_mwh: 4500
+        natura: true
+        groundwater_depth: true
+        max_groundwater_depth: -10
+    ates:
+      enable: true
+      # Public BGR aquifer model; the licensed HI grid is not research input.
+      data_source: bgr
+      data_file: null
+      ignore_missing_regions: true
+  heat_sources:
+    urban central:
+    - air
+    - ptes
+    - ates
+    - geothermal
+    - river_water
+    - lake_water
+    - sea_water
+    - electrolysis_waste
+    - fuel_cell_waste
+    - fischer_tropsch_waste
+    - haber_bosch_waste
+    - sabatier_waste
+    - methanolisation_waste
+    urban decentral:
+    - air
+    rural:
+    - air
+    - ground
+
+solving:
+  constraints:
+    CCL: false
+    EQ: false
+    BAU: false
+    SAFE: false
+    efuel_export_ban: false
+    limits_capacity_max: {}
+    limits_capacity_min: {}
+    limits_volume_max: {}
+    limits_volume_min: {}
+    limits_power_max: {}

@@ -21,14 +21,31 @@ def district_heating_subnode_demand_share_enabled(w):
 
 
 def district_heating_subnode_selection_planning_horizon(w):
+    """Planning horizon whose demand drives the demand_share subnode selection.
+
+    Which district-heating systems are represented explicitly is a topology
+    decision: the dh_subnodes resources are shared across planning horizons, so
+    the selection must be made once for the whole (myopic) chain. It is made
+    against the *final* planning horizon, i.e. the systems that matter in the
+    target year; earlier horizons then use the same set of explicit systems.
+    """
     planning_horizons = config_provider("scenario", "planning_horizons")(w)
     if not isinstance(planning_horizons, list):
         planning_horizons = [planning_horizons]
-    if len(planning_horizons) != 1:
+    if not planning_horizons:
         raise ValueError(
-            "District heating subnode demand_share requires exactly one planning horizon because dh_subnodes resources are shared across planning horizons."
+            "District heating subnode demand_share requires at least one planning horizon."
         )
-    return planning_horizons[0]
+    selection_horizon = max(planning_horizons)
+    if len(planning_horizons) > 1:
+        logger.info(
+            "District heating subnode demand_share selection uses the final "
+            "planning horizon %s of %s; the resulting set of explicit systems "
+            "is shared by all horizons.",
+            selection_horizon,
+            planning_horizons,
+        )
+    return selection_horizon
 
 
 def scenario_resource(fn):

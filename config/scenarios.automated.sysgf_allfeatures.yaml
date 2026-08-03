@@ -1,0 +1,157 @@
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
+#
+# SPDX-License-Identifier: CC0-1.0
+#
+# SysGF all-features integration test -- scenario matrix.
+#
+# Exactly one variable differs between the two scenarios: whether thermal
+# storage may be built. Everything else (heat sources, DH subnodes, spatial and
+# temporal resolution, CO2 budget) is inherited unchanged from
+# config/config.sysgf_allfeatures.yaml.
+#
+#   TESoff -- TTES, PTES and ATES all unavailable
+#   TESon  -- TTES, PTES and ATES all available
+#
+# Both run myopically over 2030 -> 2045.
+
+# ---------------------------------------------------------------------------
+# No thermal storage: the counterfactual.
+#
+# Every TES technology is switched off at its own enable flag rather than by
+# zeroing potentials, so no TES components are built at all and the shared TES
+# ratio constraints stay inactive.
+# ---------------------------------------------------------------------------
+TESoff:
+  sector:
+    ttes: false
+    district_heating:
+      ptes:
+        enable: false
+      ates:
+        enable: false
+    heat_sources:
+      urban central:
+      - air
+      - geothermal
+      - river_water
+      - lake_water
+      - sea_water
+      - electrolysis_waste
+      - fuel_cell_waste
+      - fischer_tropsch_waste
+      - haber_bosch_waste
+      - sabatier_waste
+      - methanolisation_waste
+      urban decentral:
+      - air
+      rural:
+      - air
+      - ground
+    aviation_demand_factor:
+      2020: 1.0
+      2025: 1.096
+      2030: 1.1816
+      2035: 1.2048
+      2040: 1.2285
+      2045: 1.1193
+      2050: 1.0157
+  solving:
+    options:
+      skip_iterations: false
+
+# ---------------------------------------------------------------------------
+# All thermal storage available.
+# ---------------------------------------------------------------------------
+    constraints:
+      co2_budget_national:
+        DE:
+          2020: 0.691
+          2025: 0.538
+          2030: 0.364
+          2035: 0.216
+          2040: 0.09
+          2045: -0.05
+          2050: -0.048
+  industry:
+    St_primary_fraction:
+      2020: 0.7023
+      2025: 0.705
+      2030: 0.6929
+      2035: 0.6592
+      2040: 0.6266
+      2045: 0.6047
+      2050: 0.5995
+    DRI_fraction:
+      2020: 0.0
+      2025: 0.0
+      2030: 0.2011
+      2035: 0.4974
+      2040: 0.7751
+      2045: 1.0
+      2050: 1.0
+TESon:
+  sector:
+    ttes: true
+    district_heating:
+      ptes:
+        enable: true
+      ates:
+        enable: true
+    heat_sources:
+      urban central:
+      - air
+      - ptes
+      - ates
+      - geothermal
+      - river_water
+      - lake_water
+      - sea_water
+      - electrolysis_waste
+      - fuel_cell_waste
+      - fischer_tropsch_waste
+      - haber_bosch_waste
+      - sabatier_waste
+      - methanolisation_waste
+      urban decentral:
+      - air
+      rural:
+      - air
+      - ground
+    aviation_demand_factor:
+      2020: 1.0
+      2025: 1.096
+      2030: 1.1816
+      2035: 1.2048
+      2040: 1.2285
+      2045: 1.1193
+      2050: 1.0157
+  solving:
+    options:
+      skip_iterations: false
+    constraints:
+      co2_budget_national:
+        DE:
+          2020: 0.691
+          2025: 0.538
+          2030: 0.364
+          2035: 0.216
+          2040: 0.09
+          2045: -0.05
+          2050: -0.048
+  industry:
+    St_primary_fraction:
+      2020: 0.7023
+      2025: 0.705
+      2030: 0.6929
+      2035: 0.6592
+      2040: 0.6266
+      2045: 0.6047
+      2050: 0.5995
+    DRI_fraction:
+      2020: 0.0
+      2025: 0.0
+      2030: 0.2011
+      2035: 0.4974
+      2040: 0.7751
+      2045: 1.0
+      2050: 1.0
