@@ -33,8 +33,8 @@ if { [ -z "${COPERNICUSMARINE_USERNAME:-}" ] || [ -z "${COPERNICUSMARINE_PASSWOR
   exec bash -ic 'unset SNAKEMAKE_PROFILE; exec "$@"' bash "$0" "$CONFIG"
 fi
 
-# Do not inherit a user-level Snakemake profile. The solve phase uses the
-# tracked profiles/slurm-tub profile explicitly, while build_scenarios is local.
+# Do not inherit a default Snakemake profile. The solve phase selects the
+# established TU Berlin profile explicitly, while build_scenarios is local.
 unset SNAKEMAKE_PROFILE
 export PATH="$HOME/scratch/pixi/bin:$PATH"
 
@@ -51,6 +51,6 @@ pixi run snakemake build_scenarios --cores 1 --configfile "$CONFIG" --force
 echo "=== [2/2] solve_sector_networks via SLURM ==="
 exec pixi run snakemake solve_sector_networks \
   --configfile "$CONFIG" \
-  --profile profiles/slurm-tub \
+  --profile slurm \
   --keep-going \
   --rerun-incomplete
