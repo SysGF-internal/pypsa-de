@@ -37,6 +37,6 @@ pixi run snakemake build_scenarios --cores 1 --configfile "$CONFIG" --force
 echo "=== [2/2] solve_sector_networks via SLURM ==="
 exec pixi run snakemake solve_sector_networks \
   --configfile "$CONFIG" \
-  --profile profiles/slurm-native \
+  --profile profiles/slurm-tub \
   --keep-going \
   --rerun-incomplete

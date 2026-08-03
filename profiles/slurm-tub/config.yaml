@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
+#
+# SPDX-License-Identifier: MIT
+#
+# SLURM profile for the TU Berlin HPC cluster, used directly on a login node
+# (no container, so plain sbatch rather than a path-translating wrapper).
+#
+#   pixi run snakemake <target> --configfile <cfg> --profile profiles/slurm-tub
+#
+# --time is taken from {resources.runtime} (minutes) so the per-rule runtimes
+# declared in rules/*.smk are honoured; default-resources supplies the fallback.
+executor: cluster-generic
+cluster-generic-submit-cmd:
+  sbatch --parsable
+  --mem={resources.mem_mb}
+  --cpus-per-task={threads}
+  --time={resources.runtime}
+  --partition=standard
+  --exclude=node089,node091,node186,node092
+  --job-name={rule}
+  --output=logs/slurm/{rule}-%j.out
+  --error=logs/slurm/{rule}-%j.err
+cluster-generic-cancel-cmd: scancel
+cluster-generic-cancel-nargs: 20
+jobs: 12
+latency-wait: 120
+keep-going: true
+rerun-incomplete: true
+default-resources:
+  mem_mb: 60000
+  runtime: 720
