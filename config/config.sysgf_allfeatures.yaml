@@ -79,6 +79,13 @@ clustering:
   temporal:
     resolution_sector: 365H
 
+# Keep the integration run gentle on the shared BeeGFS environment. Four
+# simultaneous availability jobs at the project default of 16 processes each
+# can launch 64 Python spawn workers at once; four per job preserves parallel
+# raster processing without that metadata burst.
+atlite:
+  nprocesses: 4
+
 co2_budget:
   2030: 0.35
   2045: 0.00

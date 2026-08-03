@@ -79,6 +79,11 @@ clustering:
   temporal:
     resolution_sector: 24H
 
+# Match the tier-1 HPC safeguard: limit each atlite job to four spawn workers
+# so concurrent availability calculations do not overwhelm BeeGFS metadata.
+atlite:
+  nprocesses: 4
+
 co2_budget:
   2030: 0.35
   2045: 0.00

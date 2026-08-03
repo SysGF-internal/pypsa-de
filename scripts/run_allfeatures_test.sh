@@ -45,11 +45,17 @@ fi
 
 mkdir -p logs/slurm
 
+echo "=== [0/2] prepare locked pixi environment ==="
+# Install or repair the environment once before any cluster jobs are submitted.
+# Subsequent --as-is runs only read it, preventing concurrent environment
+# reconciliation while multiprocessing workers import packages over BeeGFS.
+pixi install --locked
+
 echo "=== [1/2] build_scenarios (DE production entry point) ==="
-pixi run snakemake build_scenarios --cores 1 --configfile "$CONFIG" --force
+pixi run --as-is snakemake build_scenarios --cores 1 --configfile "$CONFIG" --force
 
 echo "=== [2/2] solve_sector_networks via SLURM ==="
-exec pixi run snakemake solve_sector_networks \
+exec pixi run --as-is snakemake solve_sector_networks \
   --configfile "$CONFIG" \
   --profile slurm \
   --keep-going \
