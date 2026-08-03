@@ -7,8 +7,9 @@
 #
 #   pixi run snakemake <target> --configfile <cfg> --profile profiles/slurm-tub
 #
-# --time is taken from {resources.runtime} (minutes) so the per-rule runtimes
-# declared in rules/*.smk are honoured; default-resources supplies the fallback.
+# Snakemake normalizes runtime strings to minutes before substituting
+# {resources.runtime}; default-resources therefore uses an explicit hour suffix.
+# Per-rule runtimes declared in rules/*.smk are honoured unchanged.
 executor: cluster-generic
 cluster-generic-submit-cmd:
   sbatch --parsable
@@ -28,4 +29,4 @@ keep-going: true
 rerun-incomplete: true
 default-resources:
   mem_mb: 60000
-  runtime: 720
+  runtime: 12h
