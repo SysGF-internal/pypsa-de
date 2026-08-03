@@ -1653,6 +1653,13 @@ if (AQUIFER_DATA_DATASET := dataset_version("aquifer_data"))["source"] in [
                 AQUIFER_DATA_DATASET["folder"],
             )
 
+            # Some cluster nodes lag the shared HTTP cache clock. Align every
+            # extracted output just after the cached input so Snakemake does
+            # not reject a successful retrieval as an input/output clock skew.
+            input_mtime = os.stat(input["zip_file"]).st_mtime
+            for output_file in output:
+                os.utime(output_file, (input_mtime + 1, input_mtime + 1))
+
 
 if (DH_AREAS_DATASET := dataset_version("dh_areas"))["source"] in [
     "primary",
