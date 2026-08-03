@@ -704,7 +704,9 @@ rule build_lake_heat_potential:
         ),
     resources:
         mem_mb=120000,
-        runtime=90,
+        # Serial processing of all clustered regions can exceed 90 minutes on
+        # the HPC filesystem (23 clusters expand to 42 region polygons here).
+        runtime=180,
     log:
         logs("build_lake_water_heat_potential_base_s_{clusters}.log"),
     benchmark:
