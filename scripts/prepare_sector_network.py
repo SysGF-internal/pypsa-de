@@ -3386,6 +3386,76 @@ def add_heat(
                     "dual-use central resistive heater."
                 )
 
+            # With temperature_dependent_capacity=False the simple store is
+            # energy-only and therefore agnostic to network temperatures. The
+            # approximator still reports a non-zero boost share whenever
+            # T_fwd > T_top, which would install and dispatch a booster heat
+            # pump for a store that has no temperature to boost from -- and
+            # route heat onto an evaporator bus with no sink (infeasible).
+            ptes_temperature_dependent = options["district_heating"]["ptes"][
+                "temperature_dependent_capacity"
+            ]
+
+            # ----------------------------------------------------------------
+            # CAPEX consistency across PTES model variants.
+            #
+            # The cost database prices the pit per MWh of energy capacity at its
+            # own declared design spread (Top/Bottom storage temperature). Each
+            # variant maps e_nom onto physical volume through a different
+            # effective spread dT_eff, so an identical EUR/MWh silently buys a
+            # different EUR/m3:
+            #
+            #   layered   dT_eff = max(layer_temperatures) - min(...)
+            #   simple, temperature_dependent_capacity=False (energy-only)
+            #             dT_eff = top_temperature - bottom_temperature
+            #   simple, temperature_dependent_capacity=True
+            #             dT_eff = database spread (e_max_pu already folds the
+            #             operating spread out again)
+            #
+            # Rescaling capital_cost by dT_database/dT_eff and the MWh potential
+            # by dT_eff/dT_database leaves their product -- the total CAPEX at a
+            # given physical volume limit -- unchanged, while making the
+            # realised EUR/m3 identical in every variant.
+            # ----------------------------------------------------------------
+            rho_cp_mwh_per_m3_k = 1.16222e-3  # MWh / (m3 * K)
+            dt_database = (
+                costs.at["central water pit storage", "Top storage temperature"]
+                - costs.at["central water pit storage", "Bottom storage temperature"]
+            )
+            if ptes_is_layered:
+                layer_temperatures = options["district_heating"]["ptes"]["layered"][
+                    "layer_temperatures"
+                ]
+                dt_eff = float(max(layer_temperatures) - min(layer_temperatures))
+            elif ptes_temperature_dependent:
+                dt_eff = float(dt_database)
+            else:
+                dt_eff = float(
+                    options["district_heating"]["ptes"]["top_temperature"]
+                    - options["district_heating"]["ptes"]["bottom_temperature"]
+                )
+            if dt_eff <= 0:
+                raise ValueError(
+                    "PTES effective temperature spread must be positive, got "
+                    f"{dt_eff} K. Check ptes.top_temperature/bottom_temperature "
+                    "or ptes.layered.layer_temperatures."
+                )
+            pit_capital_cost = costs.at["central water pit storage", "capital_cost"] * (
+                dt_database / dt_eff
+            )
+            pit_potentials = ptes_potentials * (dt_eff / dt_database)
+            logger.info(
+                "PTES CAPEX consistency: dT_eff=%.0f K (database spread %.0f K), "
+                "capital_cost %.3f -> %.3f EUR/MWh/a, equivalent to %.2f EUR/m3",
+                dt_eff,
+                dt_database,
+                costs.at["central water pit storage", "capital_cost"],
+                pit_capital_cost,
+                costs.at["central water pit storage", "investment"]
+                * rho_cp_mwh_per_m3_k
+                * dt_database,
+            )
+
             n.add("Carrier", f"{heat_system} water pits")
 
             if resistive_boosting:
@@ -3690,13 +3760,13 @@ def add_heat(
                     bus=heat_nodes + f" {heat_system} water pits",
                     e_cyclic=True,
                     e_nom_extendable=True,
-                    e_nom_max=ptes_potentials.reindex(heat_nodes).fillna(np.inf),
+                    e_nom_max=pit_potentials.reindex(heat_nodes).fillna(np.inf),
                     carrier=f"{heat_system} water pits",
                     standing_loss=costs.at[
                         "central water pit storage", "standing_losses"
                     ]
                     / 100,
-                    capital_cost=costs.at["central water pit storage", "capital_cost"],
+                    capital_cost=pit_capital_cost,
                     lifetime=costs.at["central water pit storage", "lifetime"],
                 )
 
@@ -3760,14 +3830,14 @@ def add_heat(
                     bus=heat_nodes + f" {heat_system} water pits",
                     e_cyclic=True,
                     e_nom_extendable=True,
-                    e_nom_max=ptes_potentials.reindex(heat_nodes).fillna(np.inf),
+                    e_nom_max=pit_potentials.reindex(heat_nodes).fillna(np.inf),
                     e_max_pu=e_max_pu,
                     carrier=f"{heat_system} water pits",
                     standing_loss=costs.at[
                         "central water pit storage", "standing_losses"
                     ]
                     / 100,
-                    capital_cost=costs.at["central water pit storage", "capital_cost"],
+                    capital_cost=pit_capital_cost,
                     lifetime=costs.at["central water pit storage", "lifetime"],
                 )
 
@@ -3804,26 +3874,36 @@ def add_heat(
                 if resistive_boosting:
                     boost_bus = heat_nodes + f" {heat_system} ptes boost demand"
                     direct_efficiency = 1.0
-                    boost_efficiency = (
-                        ptes_ds["simple_resistive_boost_per_discharge"]
-                        .transpose("time", "name")
-                        .to_pandas()
-                        .reindex(columns=heat_nodes)
-                    )
+                    if not ptes_temperature_dependent:
+                        # Energy-only store: never boost.
+                        boost_efficiency = 0.0
+                    else:
+                        boost_efficiency = (
+                            ptes_ds["simple_resistive_boost_per_discharge"]
+                            .transpose("time", "name")
+                            .to_pandas()
+                            .reindex(columns=heat_nodes)
+                        )
                 else:
                     boost_bus = heat_nodes + f" {heat_system} ptes hp input"
-                    direct_efficiency = (
-                        ptes_ds["simple_discharger_direct_efficiency"]
-                        .transpose("time", "name")
-                        .to_pandas()
-                        .reindex(columns=heat_nodes)
-                    )
-                    boost_efficiency = (
-                        ptes_ds["simple_discharger_hp_efficiency"]
-                        .transpose("time", "name")
-                        .to_pandas()
-                        .reindex(columns=heat_nodes)
-                    )
+                    if not ptes_temperature_dependent:
+                        # Energy-only store: all discharge goes straight to the
+                        # DH bus, nothing is routed to the booster evaporator.
+                        direct_efficiency = 1.0
+                        boost_efficiency = 0.0
+                    else:
+                        direct_efficiency = (
+                            ptes_ds["simple_discharger_direct_efficiency"]
+                            .transpose("time", "name")
+                            .to_pandas()
+                            .reindex(columns=heat_nodes)
+                        )
+                        boost_efficiency = (
+                            ptes_ds["simple_discharger_hp_efficiency"]
+                            .transpose("time", "name")
+                            .to_pandas()
+                            .reindex(columns=heat_nodes)
+                        )
                 n.add(
                     "Link",
                     heat_nodes,
@@ -3852,6 +3932,9 @@ def add_heat(
                         .to_pandas()
                         .reindex(columns=heat_nodes)
                     )
+                    if not ptes_temperature_dependent:
+                        # Energy-only store: the booster HP is never forced on.
+                        needs_boosting = 0
                     hp_elec_efficiency = (
                         ptes_ds["simple_hp_elec_efficiency"]
                         .transpose("time", "name")

@@ -65,19 +65,30 @@ def baseyear_value(wildcards):
 
 
 def foreign_reference_network(w):
+    """Return the *solved* reference network for ``fix_foreign_investments``.
+
+    Returns an empty list when the feature is disabled, or when the current run
+    is itself the reference (that run is the root of the fixing chain).
+
+    The reference must be a solved network: ``_apply_capacity_limits`` reads the
+    optimised ``*_nom_opt`` attributes, which are all zero in the pre-solve
+    ``resources/..._final.nc`` that ``modify_prenetwork`` itself produces. Solved
+    networks live under ``RESULTS``, so the reference scenario's run directory is
+    substituted into that path explicitly.
+    """
     fix_cfg = config_provider("fix_foreign_investments")(w)
-    current_run = getattr(w, "run", None)
-    if (
-        not fix_cfg["enable"]
-        or current_run is None
-        or current_run == fix_cfg["reference_scenario"]
-    ):
+    if not fix_cfg.get("enable", False):
         return []
 
-    return resources(
-        "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_final.nc"
+    current_run = getattr(w, "run", None)
+    reference_scenario = fix_cfg.get("reference_scenario")
+    if current_run is None or current_run == reference_scenario:
+        return []
+
+    return (
+        RESULTS + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc"
     ).format(
-        run=fix_cfg["reference_scenario"],
+        run=reference_scenario,
         clusters=w.clusters,
         opts=w.opts,
         sector_opts=w.sector_opts,

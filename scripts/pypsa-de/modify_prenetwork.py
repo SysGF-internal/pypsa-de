@@ -940,9 +940,7 @@ def modify_industry_demand(
     new_demand = pd.read_csv(
         industry_energy_demand_file,
         index_col=0,
-    )[
-        str(year)
-    ].mul(1e6)
+    )[str(year)].mul(1e6)
 
     subcategories = ["HVC", "Methanol", "Chlorine", "Ammonia"]
     carrier = ["hydrogen", "methane", "naphtha"]
@@ -1186,9 +1184,9 @@ def force_connection_nep_offshore(n, current_year, costs):
 
     if int(snakemake.params.offshore_nep_force["delay_years"]) != 0:
         # Modify 'Inbetriebnahmejahr' by adding the delay years for rows where 'Inbetriebnahmejahr' > 2025
-        offshore.loc[
-            offshore["Inbetriebnahmejahr"] > 2025, "Inbetriebnahmejahr"
-        ] += int(snakemake.params.offshore_nep_force["delay_years"])
+        offshore.loc[offshore["Inbetriebnahmejahr"] > 2025, "Inbetriebnahmejahr"] += (
+            int(snakemake.params.offshore_nep_force["delay_years"])
+        )
         offshore.loc[offshore["Inbetriebnahmejahr"] <= 2025, "Inbetriebnahmejahr"] += 1
         logger.info(
             f"Delaying NEP offshore connection points by {snakemake.params.offshore_nep_force['delay_years']} years."
@@ -1488,8 +1486,10 @@ def _identify_non_german_extendable(component, component_type, countries):
     """
     if component_type in ["Line", "Link"]:
         non_german = component.filter(regex="bus[012]").apply(
-            lambda values: (~values.str.startswith("DE").any())
-            & (not values.name.startswith("EU")),
+            lambda values: (
+                (~values.str.startswith("DE").any())
+                & (not values.name.startswith("EU"))
+            ),
             axis=1,
         )
         non_german = non_german | _get_component_mask(component, "DE", countries)
@@ -1600,7 +1600,7 @@ def _apply_capacity_limits(
     slack,
     nom_min,
     nom_max,
-    unfix_bottlenecks,
+    unfix_virtual_components,
 ):
     """
     Apply reference-based capacity limits to selected components.
@@ -1621,7 +1621,7 @@ def _apply_capacity_limits(
         Whether to constrain the lower bound to the reference solution.
     nom_max : bool
         Whether to constrain the upper bound to the reference solution.
-    unfix_bottlenecks : bool
+    unfix_virtual_components : bool
         Whether to re-enable selected bottleneck components after fixing.
     """
     if component_type == "Store":
@@ -1683,7 +1683,7 @@ def _apply_capacity_limits(
                 axis=1,
             )
 
-        if unfix_bottlenecks:
+        if unfix_virtual_components:
             _unfix_bottlenecks(
                 component_df, baseline_component, component_type, indices
             )
@@ -1695,7 +1695,7 @@ def fix_foreign_investments(
     slack=0,
     nom_min=True,
     nom_max=False,
-    unfix_bottlenecks=False,
+    unfix_virtual_components=False,
     lines_only=False,
 ):
     """
@@ -1714,7 +1714,7 @@ def fix_foreign_investments(
         Whether to apply lower bounds from the reference network.
     nom_max : bool, optional
         Whether to apply upper bounds from the reference network.
-    unfix_bottlenecks : bool, optional
+    unfix_virtual_components : bool, optional
         Whether to re-enable selected virtual or bottleneck components after
         fixing foreign capacities.
     lines_only : bool, optional
@@ -1748,12 +1748,65 @@ def fix_foreign_investments(
             slack,
             nom_min,
             nom_max,
-            unfix_bottlenecks,
+            unfix_virtual_components,
         )
 
         logger.info(
             "Fixed %s %s components outside Germany", len(indices), component_type
         )
+
+
+def _assert_foreign_investments_fixed(n, n_ref, fix_cfg):
+    """
+    Verify that foreign capacity fixing actually took effect.
+
+    With ``nom_min``, ``nom_max`` and ``slack == 0`` every fixable non-German
+    component must have been pinned (i.e. made non-extendable). Anything left
+    extendable means the fixing silently missed components, which would
+    invalidate cross-scenario comparisons. Raises in that case; for the
+    bounded variants (``slack > 0`` or only one of the bounds applied) it only
+    reports how many components were touched, since staying extendable is the
+    intended behaviour there.
+    """
+    pinning = fix_cfg["nom_min"] and fix_cfg["nom_max"] and fix_cfg["slack"] == 0
+    component_types = (
+        ["Line"]
+        if fix_cfg["lines_only"]
+        else ["Generator", "StorageUnit", "Store", "Link", "Line"]
+    )
+
+    countries = n.buses.country.unique()
+    countries = countries[(countries != "") & (countries != "DE") & ~pd.isna(countries)]
+
+    still_extendable = {}
+    for component_type in component_types:
+        component, baseline_component = _get_component_pair(n, n_ref, component_type)
+        to_fix = _identify_non_german_extendable(component, component_type, countries)
+        if not to_fix.any():
+            continue
+        indices = component.index[to_fix].intersection(baseline_component.index)
+        if not indices.empty:
+            still_extendable[component_type] = list(indices)
+
+    if not still_extendable:
+        logger.info("Postcondition: no fixable foreign components remain extendable.")
+        return
+
+    counts = {k: len(v) for k, v in still_extendable.items()}
+    if pinning:
+        examples = {k: v[:5] for k, v in still_extendable.items()}
+        raise RuntimeError(
+            "fix_foreign_investments ran with nom_min/nom_max and slack=0, but "
+            f"foreign components are still extendable: {counts}. Examples: {examples}."
+        )
+    logger.info(
+        "Postcondition: foreign components remain extendable within reference "
+        "bounds (slack=%s, nom_min=%s, nom_max=%s): %s",
+        fix_cfg["slack"],
+        fix_cfg["nom_min"],
+        fix_cfg["nom_max"],
+        counts,
+    )
 
 
 def limit_cross_border_flows_ac(n, s_max_pu):
@@ -1842,26 +1895,52 @@ if __name__ == "__main__":
     sanitize_custom_columns(n)
 
     current_run = getattr(snakemake.wildcards, "run", None)
+    fix_cfg = snakemake.params.fix_foreign_investments
 
-    if (
-        snakemake.params.fix_foreign_investments["enable"]
-        and current_run is not None
-        and current_run
-        != snakemake.params.fix_foreign_investments["reference_scenario"]
-    ):
-        logger.info(
-            "Fixing investments for components outside Germany based on the reference scenario."
-        )
-        n_ref = pypsa.Network(snakemake.input.reference_network)
-        fix_foreign_investments(
-            n,
-            n_ref,
-            snakemake.params.fix_foreign_investments["slack"],
-            snakemake.params.fix_foreign_investments["nom_min"],
-            snakemake.params.fix_foreign_investments["nom_max"],
-            snakemake.params.fix_foreign_investments["unfix_virtual_components"],
-            snakemake.params.fix_foreign_investments["lines_only"],
-        )
+    if fix_cfg["enable"]:
+        # Fail loudly instead of skipping: a silently skipped capacity fixing
+        # invalidates every downstream comparison in the fixing chain, and the
+        # skip used to be invisible because the matching input function returns
+        # [] under exactly the same conditions.
+        if current_run is None:
+            raise RuntimeError(
+                "fix_foreign_investments.enable is true but the 'run' wildcard is "
+                "unavailable, so the reference scenario cannot be identified. "
+                "Enable run.scenarios and set run.name, or disable the feature."
+            )
+        reference_scenario = fix_cfg["reference_scenario"]
+        if current_run == reference_scenario:
+            logger.info(
+                "Run '%s' is the reference scenario of its fixing chain; "
+                "no foreign investments to fix.",
+                current_run,
+            )
+        else:
+            reference_network = getattr(snakemake.input, "reference_network", None)
+            if not reference_network:
+                raise RuntimeError(
+                    f"fix_foreign_investments.enable is true for run '{current_run}' "
+                    f"with reference_scenario '{reference_scenario}', but no reference "
+                    "network was provided as input. Check that the reference scenario "
+                    "exists in the scenario file and that its solved network is built."
+                )
+            logger.info(
+                "Fixing investments for components outside Germany based on "
+                "reference scenario '%s' (%s).",
+                reference_scenario,
+                reference_network,
+            )
+            n_ref = pypsa.Network(reference_network)
+            fix_foreign_investments(
+                n,
+                n_ref,
+                fix_cfg["slack"],
+                fix_cfg["nom_min"],
+                fix_cfg["nom_max"],
+                fix_cfg["unfix_virtual_components"],
+                fix_cfg["lines_only"],
+            )
+            _assert_foreign_investments_fixed(n, n_ref, fix_cfg)
 
     if current_year in snakemake.params.uba_for_industry:
         if current_year not in [2025, 2030, 2035]:

@@ -59,9 +59,7 @@ class PtesApproximator:
                     f"Invalid top_temperature: {top_temperature!r}. "
                     "Must be 'forward' or a numeric value."
                 )
-            self.top_temperature = forward_temperature.clip(
-                max=design_top_temperature
-            )
+            self.top_temperature = forward_temperature.clip(max=design_top_temperature)
         else:
             self.top_temperature = float(top_temperature)
         if isinstance(bottom_temperature, str):
@@ -139,7 +137,17 @@ class PtesApproximator:
         """
         Binary charging availability Φ⁺_{l,t}.
 
-        For each timestep, only the layer whose temperature is closest to the forward temperature can receive charge. Returns a DataArray with dimensions (snapshot, name, layer).
+        For each timestep, only the layer whose temperature is closest to the
+        forward temperature can receive charge. The argmin is deliberately
+        unconstrained: the DH heat drawn from bus0 is proportional to the
+        enthalpy difference between the destination and source layer
+        temperatures, so the accounting stays self-consistent even when the
+        destination layer temperature exceeds the forward temperature (a small
+        exergy input from the grid makes that feasible). The charging threshold
+        is therefore the midpoint between two adjacent layers, not the layer
+        temperature itself.
+
+        Returns a DataArray with dimensions (snapshot, name, layer).
         """
 
         closest_layer_to_forward = np.abs(

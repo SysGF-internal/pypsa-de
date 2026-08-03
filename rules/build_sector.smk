@@ -649,6 +649,7 @@ rule build_river_heat_potential:
         ),
     resources:
         mem_mb=120000,
+        runtime=90,
     log:
         logs("build_river_water_heat_potential_base_s_{clusters}.log"),
     benchmark:
@@ -686,6 +687,7 @@ rule build_lake_heat_potential:
         ),
     resources:
         mem_mb=120000,
+        runtime=90,
     log:
         logs("build_lake_water_heat_potential_base_s_{clusters}.log"),
     benchmark:
@@ -825,6 +827,7 @@ rule build_sea_heat_potential:
         ),
     resources:
         mem_mb=100000,
+        runtime=60,
     log:
         logs("build_sea_water_heat_potential_base_s_{clusters}.log"),
     benchmark:

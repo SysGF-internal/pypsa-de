@@ -905,18 +905,21 @@ def add_TES_energy_to_power_ratio_constraints(
     ].values
 
     linear_expr_list = []
-    for charger, tes, energy_to_power_value in zip(
+    for charger, energy_to_power_value in zip(
         indices_charger_p_nom_extendable,
-        indices_stores_e_nom_extendable,
         energy_to_power_ratio_values,
     ):
-        charger_var = n.model["Link-p_nom"].loc[charger]
-        if not tes == charger.replace(" charger", ""):
-            # e.g. "DE0 0 urban central water tanks charger-2050" -> "DE0 0 urban central water tanks-2050"
+        # Derive the store name from the charger name instead of pairing the two
+        # indices positionally: with several TES technologies enabled at once the
+        # link and store indices are neither equally long nor equally ordered.
+        # e.g. "DE0 0 urban central water tanks charger-2050" -> "DE0 0 urban central water tanks-2050"
+        tes = charger.replace(" charger", "")
+        if tes not in indices_stores_e_nom_extendable:
             raise RuntimeError(
-                f"Charger {charger} and TES {tes} do not match. "
+                f"Charger {charger} has no matching extendable TES store '{tes}'. "
                 "Ensure that the charger and TES are in the same location and refer to the same technology."
             )
+        charger_var = n.model["Link-p_nom"].loc[charger]
         store_var = n.model["Store-e_nom"].loc[tes]
         linear_expr = store_var - energy_to_power_value * charger_var
         linear_expr_list.append(linear_expr)
@@ -981,23 +984,26 @@ def add_TES_charger_ratio_constraints(
         )
         return
 
-    for charger, discharger in zip(
-        indices_charger_p_nom_extendable, indices_discharger_p_nom_extendable
-    ):
-        if not charger.replace(" charger", " ") == discharger.replace(
-            " discharger", " "
-        ):
-            # e.g. "DE0 0 urban central water tanks charger-2050" -> "DE0 0 urban central water tanks-2050"
-            raise RuntimeError(
-                f"Charger {charger} and discharger {discharger} do not match. "
-                "Ensure that the charger and discharger are in the same location and refer to the same technology."
-            )
+    # Derive the discharger index from the charger names instead of pairing the
+    # two indices positionally: with several TES technologies enabled at once
+    # (TTES, PTES, ATES) the two filtered indices are not in matching order.
+    # e.g. "DE0 0 urban central water tanks charger-2050" -> "DE0 0 urban central water tanks discharger-2050"
+    aligned_discharger = indices_charger_p_nom_extendable.str.replace(
+        " charger", " discharger", regex=False
+    )
+    missing = aligned_discharger[
+        ~aligned_discharger.isin(indices_discharger_p_nom_extendable)
+    ]
+    if not missing.empty:
+        raise RuntimeError(
+            f"Chargers have no matching extendable discharger: {list(missing)}. "
+            "Ensure that the charger and discharger are in the same location and refer to the same technology."
+        )
 
-    eff_discharger = n.links.efficiency[indices_discharger_p_nom_extendable].values
+    eff_discharger = n.links.efficiency[aligned_discharger].values
     lhs = (
         n.model["Link-p_nom"].loc[indices_charger_p_nom_extendable]
-        - n.model["Link-p_nom"].loc[indices_discharger_p_nom_extendable]
-        * eff_discharger
+        - n.model["Link-p_nom"].loc[aligned_discharger] * eff_discharger
     )
 
     n.model.add_constraints(lhs == 0, name="TES_charger_ratio")

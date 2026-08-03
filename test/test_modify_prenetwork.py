@@ -49,7 +49,7 @@ def test_apply_capacity_limits_leaves_nom_max_unchanged_when_disabled():
         slack=0.1,
         nom_min=True,
         nom_max=False,
-        unfix_bottlenecks=False,
+        unfix_virtual_components=False,
     )
 
     assert n.generators.loc["FR wind", "p_nom_min"] == pytest.approx(6.3)
