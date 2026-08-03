@@ -40,6 +40,31 @@ idx = pd.IndexSlice
 spatial = SimpleNamespace()
 
 
+def align_existing_heating_capacities(
+    existing_capacities: pd.DataFrame,
+    nodes: pd.Index,
+    heat_system: HeatSystem,
+) -> pd.DataFrame:
+    """Align existing heating capacities to the heat buses in the network."""
+    missing_nodes = nodes.difference(existing_capacities.index)
+
+    if missing_nodes.empty:
+        return existing_capacities.loc[nodes]
+
+    if heat_system != HeatSystem.URBAN_CENTRAL:
+        raise KeyError(
+            f"Missing existing {heat_system.value} heating capacity distribution "
+            f"for nodes: {missing_nodes.tolist()}"
+        )
+
+    logger.info(
+        "Assuming zero existing urban-central heating capacity for %d explicit "
+        "district-heating subnodes, because the source data covers buildings only.",
+        len(missing_nodes),
+    )
+    return existing_capacities.reindex(nodes, fill_value=0.0)
+
+
 def add_build_year_to_new_assets(n: pypsa.Network, baseyear: int) -> None:
     """
     Add build year to new assets in the network.
@@ -984,6 +1009,9 @@ def add_heating_capacities_installed_before_baseyear(
         nodes = pd.Index(
             n.buses.location[n.buses.index.str.contains(f"{heat_system} heat")]
         )
+        heat_system_capacities = align_existing_heating_capacities(
+            existing_capacities, nodes, heat_system
+        )
 
         if (
             not heat_system == HeatSystem.URBAN_CENTRAL
@@ -1028,8 +1056,8 @@ def add_heating_capacities_installed_before_baseyear(
             # Add heat pumps
             for heat_source in heat_sources[heat_system.system_type.value]:
                 p_nom = (
-                    existing_capacities.loc[
-                        nodes, (heat_system.value, f"{heat_source} heat pump")
+                    heat_system_capacities.loc[
+                        :, (heat_system.value, f"{heat_source} heat pump")
                     ]
                     * ratio
                 )
@@ -1066,8 +1094,8 @@ def add_heating_capacities_installed_before_baseyear(
                         efficiency=1 / efficiency.clip(lower=0.001),
                         capital_cost=costs.at[costs_name, "capital_cost"],
                         onight_cost=costs.at[costs_name, "investment"],
-                        p_nom=existing_capacities.loc[
-                            nodes, (heat_system.value, f"{heat_source} heat pump")
+                        p_nom=heat_system_capacities.loc[
+                            :, (heat_system.value, f"{heat_source} heat pump")
                         ]
                         * ratio,
                         p_max_pu=0,
@@ -1096,8 +1124,8 @@ def add_heating_capacities_installed_before_baseyear(
                     * costs.at[heat_system.resistive_heater_costs_name, "investment"]
                 ),
                 p_nom=(
-                    existing_capacities.loc[
-                        nodes, (heat_system.value, "resistive heater")
+                    heat_system_capacities.loc[
+                        :, (heat_system.value, "resistive heater")
                     ]
                     * ratio
                     / costs.at[heat_system.resistive_heater_costs_name, "efficiency"]
@@ -1129,7 +1157,7 @@ def add_heating_capacities_installed_before_baseyear(
                     * costs.at[heat_system.gas_boiler_costs_name, "investment"]
                 ),
                 p_nom=(
-                    existing_capacities.loc[nodes, (heat_system.value, "gas boiler")]
+                    heat_system_capacities.loc[:, (heat_system.value, "gas boiler")]
                     * ratio
                     / costs.at[heat_system.gas_boiler_costs_name, "efficiency"]
                 ),
@@ -1156,7 +1184,7 @@ def add_heating_capacities_installed_before_baseyear(
                 onight_cost=costs.at[heat_system.oil_boiler_costs_name, "efficiency"]
                 * costs.at[heat_system.oil_boiler_costs_name, "investment"],
                 p_nom=(
-                    existing_capacities.loc[nodes, (heat_system.value, "oil boiler")]
+                    heat_system_capacities.loc[:, (heat_system.value, "oil boiler")]
                     * ratio
                     / costs.at[heat_system.oil_boiler_costs_name, "efficiency"]
                 ),
@@ -1172,8 +1200,8 @@ def add_heating_capacities_installed_before_baseyear(
 
             # prevents redundant addition of urban central biomass boiler which tends to crash
             if (
-                existing_capacities.loc[
-                    nodes, (heat_system.value, "biomass boiler")
+                heat_system_capacities.loc[
+                    :, (heat_system.value, "biomass boiler")
                 ].sum()
                 > 0
             ):
@@ -1189,8 +1217,8 @@ def add_heating_capacities_installed_before_baseyear(
                     * costs.at["biomass boiler", "capital_cost"],
                     onight_cost=efficiency * costs.at["biomass boiler", "investment"],
                     p_nom=(
-                        existing_capacities.loc[
-                            nodes, (heat_system.value, "biomass boiler")
+                        heat_system_capacities.loc[
+                            :, (heat_system.value, "biomass boiler")
                         ]
                         * ratio
                         / efficiency
