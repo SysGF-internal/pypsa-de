@@ -99,6 +99,14 @@ fix_foreign_investments:
   reference_scenario: null
 
 sector:
+  # Keep every parent process required by the six configured PtX waste-heat
+  # sources enabled explicitly. In particular, config.de.yaml disables
+  # ammonia by default, which would otherwise omit the Haber-Bosch links.
+  heating: true
+  industry: true
+  ammonia: true
+  methanation: true
+  hydrogen_fuel_cell: true
   chp:
     enable: true
   # All three thermal storage technologies; the scenario file switches them
