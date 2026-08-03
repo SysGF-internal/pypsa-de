@@ -17,11 +17,25 @@ cd "$(dirname "$0")/.."
 CONFIG="${1:-config/config.sysgf_allfeatures.yaml}"
 
 # Copernicus Marine credentials for retrieve_seawater_temperature live in the
-# login shell profile; the retrieve rule reads them from the environment.
+# interactive shell profile; the retrieve rule reads them from the environment.
 if [ -f "$HOME/.bashrc" ]; then
   # shellcheck disable=SC1091
   source "$HOME/.bashrc"
 fi
+
+# TU Berlin's .bashrc returns before its credential exports in non-interactive
+# shells. Re-enter once through an interactive shell so those exports are
+# inherited by this script. The marker prevents recursion when no credentials
+# are configured at all.
+if { [ -z "${COPERNICUSMARINE_USERNAME:-}" ] || [ -z "${COPERNICUSMARINE_PASSWORD:-}" ]; } &&
+  [ "${SYSGF_ALLFEATURES_INTERACTIVE_SHELL:-0}" != 1 ]; then
+  export SYSGF_ALLFEATURES_INTERACTIVE_SHELL=1
+  exec bash -ic 'unset SNAKEMAKE_PROFILE; exec "$@"' bash "$0" "$CONFIG"
+fi
+
+# Do not inherit a user-level Snakemake profile. The solve phase uses the
+# tracked profiles/slurm-tub profile explicitly, while build_scenarios is local.
+unset SNAKEMAKE_PROFILE
 export PATH="$HOME/scratch/pixi/bin:$PATH"
 
 if [ -z "${COPERNICUSMARINE_USERNAME:-}" ] || [ -z "${COPERNICUSMARINE_PASSWORD:-}" ]; then
